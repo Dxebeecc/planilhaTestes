@@ -103,7 +103,7 @@
 
     <div id="chart-modal-overlay" class="modal-overlay"><div class="card w-full max-w-4xl"><div class="flex justify-between items-center mb-4"><h2>Evolução</h2><button onclick="closeModal('chart-modal-overlay')"><i data-lucide="x"></i></button></div><div class="h-[40vh]"><canvas id="globalChart"></canvas></div></div></div>
     
-    <!-- CORREÇÃO: ADICIONADO ID "cashflow-title" -->
+    <!-- Modal Fluxo de Caixa -->
     <div id="cashflow-modal-overlay" class="modal-overlay">
         <div class="card w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
             <div class="flex justify-between items-center mb-4">
@@ -116,7 +116,6 @@
 
     <div id="backup-modal-overlay" class="modal-overlay"><div class="card w-full max-w-xs text-center"><div class="flex justify-between items-center mb-6"><h2>Menu</h2><button onclick="closeModal('backup-modal-overlay')"><i data-lucide="x"></i></button></div><div class="space-y-3"><button onclick="advanceTimeline()" class="btn btn-secondary w-full text-red-400">Encerrar Mês</button><button onclick="downloadBackup()" class="btn btn-primary w-full">Exportar Dados</button><input type="file" id="importFile" class="hidden" accept=".json" onchange="handleImport(this)"><button onclick="document.getElementById('importFile').click()" class="btn btn-secondary w-full">Importar Dados</button></div></div></div>
     
-    <!-- CORREÇÃO: ADICIONADO ID "confirm-title" -->
     <div id="confirm-modal-overlay" class="modal-overlay">
         <div class="card w-full max-w-xs text-center">
             <h3 id="confirm-title" class="text-sm font-black uppercase mb-4">Confirmar?</h3>
@@ -178,10 +177,20 @@
                 if (!m.bank1Name) m.bank1Name = 'BANCO DO BRASIL';
                 if (!m.bank2Name) m.bank2Name = 'MERCADO PAGO';
                 if (m.data) {
+                    // MIGRAÇÃO ULTRA AGRESSIVA: Converte chaves antigas para as novas
+                    if (m.data.fixedExpenses && (!m.data.fixedExpensesEntries || m.data.fixedExpensesEntries.length === 0)) {
+                        m.data.fixedExpensesEntries = m.data.fixedExpenses;
+                    }
+                    if (m.data.variableExpenses && (!m.data.variableExpensesEntries || m.data.variableExpensesEntries.length === 0)) {
+                        m.data.variableExpensesEntries = m.data.variableExpenses;
+                    }
                     if (!m.data.incomeEntries) m.data.incomeEntries = [];
-                    if (!m.data.fixedExpensesEntries) m.data.fixedExpensesEntries = m.data.fixedExpenses || [];
-                    if (!m.data.variableExpensesEntries) m.data.variableExpensesEntries = m.data.variableExpenses || [];
-                    [...m.data.fixedExpensesEntries, ...m.data.variableExpensesEntries].forEach(item => { if (item.source === undefined) item.source = 'B1'; });
+                    if (!m.data.fixedExpensesEntries) m.data.fixedExpensesEntries = [];
+                    if (!m.data.variableExpensesEntries) m.data.variableExpensesEntries = [];
+
+                    [...m.data.fixedExpensesEntries, ...m.data.variableExpensesEntries].forEach(item => { 
+                        if (item.source === undefined) item.source = 'B1'; 
+                    });
                 }
             });
             saveData();
@@ -230,7 +239,7 @@
                             <div class="grid grid-cols-4 gap-1 text-center pt-1 border-t border-slate-700/20">
                                 <div><p class="text-[7px] text-slate-500">FIXAS</p><p class="text-[9px] font-bold text-blue-300" id="det-fix-${i}">R$ 0</p></div>
                                 <div><p class="text-[7px] text-slate-500">VARIAV</p><p class="text-[9px] font-bold text-orange-300" id="det-var-${i}">R$ 0</p></div>
-                                <div><p class="text-[7px] text-red-500">PEND</p><p class="text-[9px] font-bold text-red-500" id="det-pend-${i}">R$ 0</p></div>
+                                <div><p class="text-[7px] text-red-400">PEND</p><p class="text-[9px] font-bold text-red-500" id="det-pend-${i}">R$ 0</p></div>
                                 <div><p class="text-[7px] text-slate-500">TOTAL</p><p class="text-[9px] font-bold text-white" id="det-tot-${i}">R$ 0</p></div>
                             </div>
                             <div class="pt-2 border-t border-slate-700/30">
@@ -288,7 +297,7 @@
                 const isExp = type === 'fixed' || type === 'variable';
                 const bankLabel = item.source === 'B1' ? b1S : b2S;
 
-                let valHtml = `<input type="number" step="0.01" value="${item.value || 0}" class="input-clean text-right w-16" onchange="updateValue(${mIdx},'${type}','${item.id}',this.value)" ${item.isCalculated || item.isSystem ? 'readonly' : ''}>`;
+                let valHtml = `<input type="number" step="0.01" value="${item.value || 0}" class="input-clean text-right w-16 font-black" onchange="updateValue(${mIdx},'${type}','${item.id}',this.value)" ${item.isCalculated || item.isSystem ? 'readonly' : ''}>`;
                 if (item.isCalculated) {
                     const tot = (item.hours||0)*(item.rate||0);
                     valHtml = `<div class="flex items-center gap-1"><input type="number" value="${item.hours || 0}" class="bg-slate-900 rounded w-7 text-center text-[10px] font-bold" onchange="updateProp(${mIdx},'income','${item.id}','hours',this.value)"><span class="text-[9px] font-black text-slate-500">h=${tot.toFixed(0)}</span></div>`;
@@ -318,7 +327,19 @@
 
         // --- LÓGICA DE DADOS ---
         function selecionarMes(idx) { activeIndex = idx; refreshUI(); }
-        function handleWalletEdit(mIdx, f, v) { const m = timeline[mIdx]; const nV = parseFloat(v) || 0; const sK = f === 'bank1Balance' ? 'B1' : 'B2'; const sP = [...(m.data.fixedExpensesEntries||[]), ...(m.data.variableExpensesEntries||[])].filter(x => x.isPaid && x.source === sK).reduce((s, x) => s + (x.value || 0), 0); m[f] = nV + sP; saveData(); updateStats(mIdx); }
+        
+        function handleWalletEdit(mIdx, f, v) { 
+            const m = timeline[mIdx]; 
+            const nV = parseFloat(v) || 0; 
+            const sK = f === 'bank1Balance' ? 'B1' : 'B2'; 
+            const sP = [...(m.data.fixedExpensesEntries||[]), ...(m.data.variableExpensesEntries||[])]
+                        .filter(x => x.isPaid && x.source === sK)
+                        .reduce((s, x) => s + (parseFloat(x.value) || 0), 0); 
+            m[f] = nV + sP; 
+            saveData(); 
+            updateStats(mIdx); 
+        }
+
         function updateBankName(idx, f, v) { timeline[idx][f] = v.toUpperCase() || 'BANCO'; saveData(); renderAll(); }
         function updateProp(mIdx,t,id,p,v) { const i = getL(mIdx,t).find(x=>x.id==id); if(i){ i[p]=(p==='hours'?parseFloat(v):v); saveData(); propagateBalances(); refreshUI(); } }
         function updateValue(mIdx,t,id,v) { const i = getL(mIdx,t).find(x=>x.id==id); if(i){ i.value=parseFloat(v)||0; saveData(); propagateBalances(); refreshUI(); } }
@@ -331,9 +352,9 @@
         function propagateBalances() {
             for (let i = 0; i < timeline.length - 1; i++) {
                 const d = timeline[i].data;
-                const inc = (d.incomeEntries||[]).reduce((s, x) => s + (x.isCalculated ? (x.hours * x.rate) : (x.value || 0)), 0);
-                const fixT = (d.fixedExpensesEntries||[]).reduce((s, x) => s + (x.value || 0), 0);
-                const varT = (d.variableExpensesEntries||[]).reduce((s, x) => s + (x.value || 0), 0);
+                const inc = (d.incomeEntries||[]).reduce((s, x) => s + (x.isCalculated ? (parseFloat(x.hours) * parseFloat(x.rate)) : (parseFloat(x.value) || 0)), 0);
+                const fixT = (d.fixedExpensesEntries||[]).reduce((s, x) => s + (parseFloat(x.value) || 0), 0);
+                const varT = (d.variableExpensesEntries||[]).reduce((s, x) => s + (parseFloat(x.value) || 0), 0);
                 let nextSys = timeline[i+1].data.incomeEntries.find(x => x.isSystem);
                 if(nextSys) nextSys.value = inc - (fixT + varT);
             }
@@ -341,11 +362,11 @@
 
         function updateStats(mIdx) {
             const m = timeline[mIdx]; if (!m) return; const d = m.data;
-            const inc = (d.incomeEntries||[]).reduce((s, x) => s + (x.isCalculated ? (x.hours * x.rate) : (x.value || 0)), 0);
-            const fixP = (d.fixedExpensesEntries||[]).reduce((s, x) => s + (x.isPaid ? (x.value || 0) : 0), 0);
-            const fixT = (d.fixedExpensesEntries||[]).reduce((s, x) => s + (x.value || 0), 0);
-            const varP = (d.variableExpensesEntries||[]).reduce((s, x) => s + (x.isPaid ? (x.value || 0) : 0), 0);
-            const varT = (d.variableExpensesEntries||[]).reduce((s, x) => s + (x.value || 0), 0);
+            const inc = (d.incomeEntries||[]).reduce((s, x) => s + (x.isCalculated ? (parseFloat(x.hours) * parseFloat(x.rate)) : (parseFloat(x.value) || 0)), 0);
+            const fixP = (d.fixedExpensesEntries||[]).reduce((s, x) => s + (x.isPaid ? (parseFloat(x.value) || 0) : 0), 0);
+            const fixT = (d.fixedExpensesEntries||[]).reduce((s, x) => s + (parseFloat(x.value) || 0), 0);
+            const varP = (d.variableExpensesEntries||[]).reduce((s, x) => s + (x.isPaid ? (parseFloat(x.value) || 0) : 0), 0);
+            const varT = (d.variableExpensesEntries||[]).reduce((s, x) => s + (parseFloat(x.value) || 0), 0);
             const totalT = fixT + varT; const totalP = fixP + varP;
             
             const elSet = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
@@ -353,9 +374,9 @@
             const elBal = document.getElementById(`stat-bal-${mIdx}`); if(elBal) { const bal = inc - totalT; elBal.textContent = formatBRL(bal); elBal.className = `text-xs font-black ${bal>=0?'text-blue-400':'text-red-400'}`; }
             const pr = totalT > 0 ? (totalP / totalT * 100).toFixed(0) : 0; const elB = document.getElementById(`prog-paid-${mIdx}`); if(elB) elB.style.width = pr + '%';
 
-            const sumPaidB1 = [...(d.fixedExpensesEntries||[]), ...(d.variableExpensesEntries||[])].filter(x => x.isPaid && x.source === 'B1').reduce((s, x) => s + (x.value || 0), 0);
-            const sumPaidB2 = [...(d.fixedExpensesEntries||[]), ...(d.variableExpensesEntries||[])].filter(x => x.isPaid && x.source === 'B2').reduce((s, x) => s + (x.value || 0), 0);
-            const b1 = (m.bank1Balance || 0) - sumPaidB1; const b2 = (m.bank2Balance || 0) - sumPaidB2;
+            const sumPaidB1 = [...(d.fixedExpensesEntries||[]), ...(d.variableExpensesEntries||[])].filter(x => x.isPaid && x.source === 'B1').reduce((s, x) => s + (parseFloat(x.value) || 0), 0);
+            const sumPaidB2 = [...(d.fixedExpensesEntries||[]), ...(d.variableExpensesEntries||[])].filter(x => x.isPaid && x.source === 'B2').reduce((s, x) => s + (parseFloat(x.value) || 0), 0);
+            const b1 = (parseFloat(m.bank1Balance) || 0) - sumPaidB1; const b2 = (parseFloat(m.bank2Balance) || 0) - sumPaidB2;
             const in1 = document.getElementById(`live-b1-${mIdx}`); const in2 = document.getElementById(`live-b2-${mIdx}`);
             if(in1) { in1.value = b1.toFixed(2); in1.style.color = b1 >= 0 ? '#10b981' : '#ef4444'; }
             if(in2) { in2.value = b2.toFixed(2); in2.style.color = b2 >= 0 ? '#10b981' : '#ef4444'; }
@@ -377,34 +398,54 @@
         function openModal(id) { document.getElementById(id).style.display='flex'; lucide.createIcons(); }
         function closeModal(id) { document.getElementById(id).style.display='none'; }
         function formatBRL(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
-        function customConfirm(t, b, cb) { 
-            const body = document.getElementById('confirm-body');
-            if(body) body.innerText = b; 
-            const btn = document.getElementById('confirm-btn-yes'); 
-            if(btn) btn.onclick = () => { closeModal('confirm-modal-overlay'); cb(); }; 
-            openModal('confirm-modal-overlay'); 
-        }
+        function customConfirm(t, b, cb) { const body = document.getElementById('confirm-body'); if(body) body.innerText = b; const btn = document.getElementById('confirm-btn-yes'); if(btn) btn.onclick = () => { closeModal('confirm-modal-overlay'); cb(); }; openModal('confirm-modal-overlay'); }
         function editAppTitle() { const n = prompt("Nome:", "Finanças Pro"); if(n){ document.getElementById('app-display-title').innerText = n; localStorage.setItem(TITLE_KEY, n); saveData(); } }
         function downloadBackup() { const b = new Blob([JSON.stringify(timeline)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `backup_v42.json`; a.click(); }
         function handleImport(input) { const r = new FileReader(); r.onload = e => { timeline = JSON.parse(e.target.result); migrateToV42(); location.reload(); }; r.readAsText(input.files[0]); }
+        
         function showCashFlow(idx) {
-            const m = timeline[idx]; const entries = [...m.data.incomeEntries.map(i => ({ ...i, val: i.isCalculated?i.hours*i.rate:i.value, type:'IN' })), ...(m.data.fixedExpensesEntries||[]).map(i => ({ ...i, val: -i.value, type:'OUT' })), ...(m.data.variableExpensesEntries||[]).map(i => ({ ...i, val: -i.value, type:'OUT' }))].sort((a,b) => { const dA = new Date(a.date || '9999-12-31'); const dB = new Date(b.date || '9999-12-31'); if (dA - dB !== 0) return dA - dB; return a.type === 'IN' ? -1 : 1; });
+            const m = timeline[idx];
+            if(!m || !m.data) return;
+            
+            // Defensivo: Garante que as listas existam antes de mapear
+            const incEntries = m.data.incomeEntries || [];
+            const fixEntries = m.data.fixedExpensesEntries || [];
+            const varEntries = m.data.variableExpensesEntries || [];
+
+            const entries = [
+                ...incEntries.map(i => ({ ...i, val: i.isCalculated ? (parseFloat(i.hours)*parseFloat(i.rate)) : (parseFloat(i.value)||0), type:'IN' })),
+                ...fixEntries.map(i => ({ ...i, val: -(parseFloat(i.value)||0), type:'OUT' })),
+                ...varEntries.map(i => ({ ...i, val: -(parseFloat(i.value)||0), type:'OUT' }))
+            ].sort((a,b) => { 
+                const dA = new Date(a.date || '9999-12-31'); 
+                const dB = new Date(b.date || '9999-12-31'); 
+                if (dA - dB !== 0) return dA - dB; 
+                return a.type === 'IN' ? -1 : 1; 
+            });
+            
             let run = 0; 
             const content = document.getElementById('cashflow-content');
-            if(content) content.innerHTML = `<table class="w-full text-left"><thead class="sticky top-0 bg-slate-800 text-[10px] uppercase text-slate-500"><tr><th class="p-3">Data</th><th>Descr.</th><th class="text-right">Valor</th></tr></thead><tbody>${entries.map(e=>{ run+=e.val; return `<tr class="border-b border-slate-700/50 text-[11px]"><td class="p-3 text-slate-500 font-mono">${e.date?new Date(e.date+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td><td class="font-bold text-slate-300">${e.name}</td><td class="text-right font-bold ${e.type==='IN'?'text-green-400':'text-red-400'}">${formatBRL(e.val)}</td></tr>`}).join('')}</tbody></table>`;
+            if(content) {
+                content.innerHTML = `<table class="w-full text-left"><thead class="sticky top-0 bg-slate-800 text-[10px] uppercase text-slate-500"><tr><th class="p-3">Data</th><th>Descr.</th><th class="text-right">Valor</th><th class="text-right p-3">Saldo</th></tr></thead><tbody>${entries.map(e=>{ 
+                    run += e.val; 
+                    return `<tr class="border-b border-slate-700/50 text-[11px]"><td class="p-3 text-slate-500 font-mono">${e.date?new Date(e.date+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td><td class="font-bold text-slate-300 truncate max-w-[120px]">${e.name}</td><td class="text-right font-bold ${e.type==='IN'?'text-green-400':'text-red-400'}">${formatBRL(e.val)}</td><td class="text-right font-black p-3 ${run<0?'text-red-500':'text-blue-400'}">${formatBRL(run)}</td></tr>`
+                }).join('')}</tbody></table>`;
+            }
             const title = document.getElementById('cashflow-title');
             if(title) title.innerText = `Fluxo: ${m.label}`; 
             openModal('cashflow-modal-overlay');
         }
+
         function openChartModal() { openModal('chart-modal-overlay'); setTimeout(initChart, 100); }
         function initChart() {
             const ctx = document.getElementById('globalChart'); if(!ctx) return;
             const labels = timeline.map(m => m.label);
-            const incs = timeline.map(m => (m.data.incomeEntries||[]).reduce((s, x) => s + (x.isCalculated ? (x.hours * x.rate) : (x.value || 0)), 0));
-            const exps = timeline.map(m => (m.data.fixedExpensesEntries||[]).reduce((s, x) => s + (x.value || 0), 0) + (m.data.variableExpensesEntries||[]).reduce((s, x) => s + (x.value || 0), 0));
+            const incs = timeline.map(m => (m.data.incomeEntries||[]).reduce((s, x) => s + (x.isCalculated ? (parseFloat(x.hours) * parseFloat(x.rate)) : (parseFloat(x.value) || 0)), 0));
+            const exps = timeline.map(m => (m.data.fixedExpensesEntries||[]).reduce((s, x) => s + (parseFloat(x.value) || 0), 0) + (m.data.variableExpensesEntries||[]).reduce((s, x) => s + (parseFloat(x.value) || 0), 0));
             if(globalChart) globalChart.destroy();
             globalChart = new Chart(ctx.getContext('2d'), { type: 'bar', data: { labels, datasets: [{ label: 'Renda', data: incs, backgroundColor: '#3b82f6' }, { label: 'Saídas', data: exps, backgroundColor: '#ef4444' }] }, options: { responsive: true, maintainAspectRatio: false } });
         }
+
         function copyPrev(mIdx, type) { if (mIdx === 0) return; const k = type==='income'?'incomeEntries':(type==='fixed'?'fixedExpensesEntries':'variableExpensesEntries'); const clean = JSON.parse(JSON.stringify(timeline[mIdx-1].data[k])).filter(x=>!x.isSystem).map(x=>({...x, id:Math.random(), isPaid:false})); if(type==='income'){ const sys = timeline[mIdx].data.incomeEntries.find(x=>x.isSystem); timeline[mIdx].data.incomeEntries = [sys, ...clean]; } else { timeline[mIdx].data[k] = clean; } saveData(); propagateBalances(); refreshUI(); }
         function advanceTimeline() { customConfirm("Encerrar Mês?", "O mês mais antigo será removido da vista.", () => { timeline.shift(); if(timeline.length < 1) createInitialTimeline(); else { const last = timeline[timeline.length - 1]; let nIdx = (MONTH_NAMES.indexOf(last.label) + 1) % 12; let nYear = nIdx === 0 ? last.year + 1 : last.year; timeline.push({ label: MONTH_NAMES[nIdx], year: nYear, bank1Name: last.bank1Name, bank2Name: last.bank2Name, bank1Balance: 0, bank2Balance: 0, data: createEmptyMonthData(nIdx, nYear) }); } saveData(); propagateBalances(); location.reload(); }); }
         function addNewMonthManual() { const last = timeline[timeline.length - 1]; let nextMIdx = (MONTH_NAMES.indexOf(last.label) + 1) % 12; let nextYear = nextMIdx === 0 ? last.year + 1 : last.year; timeline.push({ label: MONTH_NAMES[nextMIdx], year: nextYear, bank1Name: last.bank1Name, bank2Name: last.bank2Name, bank1Balance: 0, bank2Balance: 0, data: createEmptyMonthData(nextMIdx, nextYear) }); propagateBalances(); activeIndex = timeline.length - 1; renderAll(); saveData(); }
