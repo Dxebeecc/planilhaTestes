@@ -102,9 +102,31 @@
     </div>
 
     <div id="chart-modal-overlay" class="modal-overlay"><div class="card w-full max-w-4xl"><div class="flex justify-between items-center mb-4"><h2>Evolução</h2><button onclick="closeModal('chart-modal-overlay')"><i data-lucide="x"></i></button></div><div class="h-[40vh]"><canvas id="globalChart"></canvas></div></div></div>
-    <div id="cashflow-modal-overlay" class="modal-overlay"><div class="card w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"><div class="flex justify-between items-center mb-4"><h2>Fluxo</h2><button onclick="closeModal('cashflow-modal-overlay')"><i data-lucide="x"></i></button></div><div class="overflow-y-auto no-scrollbar" id="cashflow-content"></div></div></div>
+    
+    <!-- CORREÇÃO: ADICIONADO ID "cashflow-title" -->
+    <div id="cashflow-modal-overlay" class="modal-overlay">
+        <div class="card w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="cashflow-title" class="text-sm font-black uppercase">Fluxo</h2>
+                <button onclick="closeModal('cashflow-modal-overlay')"><i data-lucide="x"></i></button>
+            </div>
+            <div class="overflow-y-auto no-scrollbar" id="cashflow-content"></div>
+        </div>
+    </div>
+
     <div id="backup-modal-overlay" class="modal-overlay"><div class="card w-full max-w-xs text-center"><div class="flex justify-between items-center mb-6"><h2>Menu</h2><button onclick="closeModal('backup-modal-overlay')"><i data-lucide="x"></i></button></div><div class="space-y-3"><button onclick="advanceTimeline()" class="btn btn-secondary w-full text-red-400">Encerrar Mês</button><button onclick="downloadBackup()" class="btn btn-primary w-full">Exportar Dados</button><input type="file" id="importFile" class="hidden" accept=".json" onchange="handleImport(this)"><button onclick="document.getElementById('importFile').click()" class="btn btn-secondary w-full">Importar Dados</button></div></div></div>
-    <div id="confirm-modal-overlay" class="modal-overlay"><div class="card w-full max-w-xs text-center"><h3>Confirmar?</h3><p id="confirm-body" class="text-xs text-slate-400 mb-6"></p><div class="flex justify-center gap-4"><button id="confirm-btn-yes" class="btn btn-primary px-8">Sim</button><button onclick="closeModal('confirm-modal-overlay')" class="btn btn-secondary">Não</button></div></div></div>
+    
+    <!-- CORREÇÃO: ADICIONADO ID "confirm-title" -->
+    <div id="confirm-modal-overlay" class="modal-overlay">
+        <div class="card w-full max-w-xs text-center">
+            <h3 id="confirm-title" class="text-sm font-black uppercase mb-4">Confirmar?</h3>
+            <p id="confirm-body" class="text-xs text-slate-400 mb-6"></p>
+            <div class="flex justify-center gap-4">
+                <button id="confirm-btn-yes" class="btn btn-primary px-8">Sim</button>
+                <button onclick="closeModal('confirm-modal-overlay')" class="btn btn-secondary">Não</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const STORAGE_KEY = 'financialData_App_v42_final';
@@ -186,7 +208,6 @@
                 div.id = `container-${i}`;
                 div.className = `planilha-mes-container space-y-4 ${i === activeIndex ? 'active-month-container' : ''}`;
                 div.innerHTML = `
-                    <!-- COCKPIT ULTRA COMPACTO -->
                     <div class="card bg-slate-800/60 border-blue-500/20 py-3">
                         <div class="flex flex-col space-y-3">
                             <div class="flex justify-between items-center px-1">
@@ -356,14 +377,24 @@
         function openModal(id) { document.getElementById(id).style.display='flex'; lucide.createIcons(); }
         function closeModal(id) { document.getElementById(id).style.display='none'; }
         function formatBRL(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
-        function customConfirm(t, b, cb) { document.getElementById('confirm-body').innerText = b; const btn = document.getElementById('confirm-btn-yes'); btn.onclick = () => { closeModal('confirm-modal-overlay'); cb(); }; openModal('confirm-modal-overlay'); }
+        function customConfirm(t, b, cb) { 
+            const body = document.getElementById('confirm-body');
+            if(body) body.innerText = b; 
+            const btn = document.getElementById('confirm-btn-yes'); 
+            if(btn) btn.onclick = () => { closeModal('confirm-modal-overlay'); cb(); }; 
+            openModal('confirm-modal-overlay'); 
+        }
         function editAppTitle() { const n = prompt("Nome:", "Finanças Pro"); if(n){ document.getElementById('app-display-title').innerText = n; localStorage.setItem(TITLE_KEY, n); saveData(); } }
         function downloadBackup() { const b = new Blob([JSON.stringify(timeline)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `backup_v42.json`; a.click(); }
         function handleImport(input) { const r = new FileReader(); r.onload = e => { timeline = JSON.parse(e.target.result); migrateToV42(); location.reload(); }; r.readAsText(input.files[0]); }
         function showCashFlow(idx) {
             const m = timeline[idx]; const entries = [...m.data.incomeEntries.map(i => ({ ...i, val: i.isCalculated?i.hours*i.rate:i.value, type:'IN' })), ...(m.data.fixedExpensesEntries||[]).map(i => ({ ...i, val: -i.value, type:'OUT' })), ...(m.data.variableExpensesEntries||[]).map(i => ({ ...i, val: -i.value, type:'OUT' }))].sort((a,b) => { const dA = new Date(a.date || '9999-12-31'); const dB = new Date(b.date || '9999-12-31'); if (dA - dB !== 0) return dA - dB; return a.type === 'IN' ? -1 : 1; });
-            let run = 0; document.getElementById('cashflow-content').innerHTML = `<table class="w-full text-left"><thead class="sticky top-0 bg-slate-800 text-[10px] uppercase text-slate-500"><tr><th class="p-3">Data</th><th>Descr.</th><th class="text-right">Valor</th></tr></thead><tbody>${entries.map(e=>{ run+=e.val; return `<tr class="border-b border-slate-700/50 text-[11px]"><td class="p-3 text-slate-500 font-mono">${e.date?new Date(e.date+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td><td class="font-bold text-slate-300">${e.name}</td><td class="text-right font-bold ${e.type==='IN'?'text-green-400':'text-red-400'}">${formatBRL(e.val)}</td></tr>`}).join('')}</tbody></table>`;
-            document.getElementById('cashflow-title').innerText = `Fluxo: ${m.label}`; openModal('cashflow-modal-overlay');
+            let run = 0; 
+            const content = document.getElementById('cashflow-content');
+            if(content) content.innerHTML = `<table class="w-full text-left"><thead class="sticky top-0 bg-slate-800 text-[10px] uppercase text-slate-500"><tr><th class="p-3">Data</th><th>Descr.</th><th class="text-right">Valor</th></tr></thead><tbody>${entries.map(e=>{ run+=e.val; return `<tr class="border-b border-slate-700/50 text-[11px]"><td class="p-3 text-slate-500 font-mono">${e.date?new Date(e.date+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td><td class="font-bold text-slate-300">${e.name}</td><td class="text-right font-bold ${e.type==='IN'?'text-green-400':'text-red-400'}">${formatBRL(e.val)}</td></tr>`}).join('')}</tbody></table>`;
+            const title = document.getElementById('cashflow-title');
+            if(title) title.innerText = `Fluxo: ${m.label}`; 
+            openModal('cashflow-modal-overlay');
         }
         function openChartModal() { openModal('chart-modal-overlay'); setTimeout(initChart, 100); }
         function initChart() {
