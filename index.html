@@ -1,523 +1,595 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#020617"/>
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icon-192.png">
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { 
+  Plus, Trash2, TrendingUp, TrendingDown, Wallet, 
+  Moon, Sun, Save, Download, Upload, Copy, 
+  CheckCircle2, Circle, LayoutDashboard, List, PieChart, 
+  Home, ShoppingCart, Car, Heart, Coffee, AlertCircle, 
+  CalendarDays, Building2, CreditCard, Target, ArrowRight,
+  MoreHorizontal, Landmark, Pencil, X, DollarSign, Repeat,
+  Filter, Search, AlertTriangle
+} from 'lucide-react';
 
-    <title id="page-title">Finanças Pro v39</title>
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+// --- CONFIGURAÇÃO E UTILITÁRIOS ---
+const STORAGE_KEY = 'financas_pro_ultimate_v7_budget_fix';
+const MONTH_NAMES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #020617; color: #f1f5f9; scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
-        
-        .card { background-color: #1e293b; border-radius: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4); padding: 1.25rem; border: 1px solid #334155; }
-        
-        /* Sistema de Páginas */
-        .view-section { display: none; animation: slideUp 0.3s ease-out; }
-        .view-section.active { display: block; }
-        
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+const CATEGORIES = {
+  'Moradia': { color: '#3b82f6', icon: <Home size={16} />, bg: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' },
+  'Alimentação': { color: '#f59e0b', icon: <ShoppingCart size={16} />, bg: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' },
+  'Transporte': { color: '#10b981', icon: <Car size={16} />, bg: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
+  'Saúde': { color: '#ef4444', icon: <Heart size={16} />, bg: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
+  'Lazer': { color: '#8b5cf6', icon: <Coffee size={16} />, bg: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' },
+  'Educação': { color: '#ec4899', icon: <Building2 size={16} />, bg: 'bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400' },
+  'Outros': { color: '#71717a', icon: <AlertCircle size={16} />, bg: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400' }
+};
 
-        /* Barra de Navegação Inferior */
-        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #334155; display: flex; justify-content: space-around; padding: 0.75rem 0.5rem; z-index: 100; backdrop-filter: blur(10px); padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
-        .nav-item { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; color: #64748b; font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
-        .nav-item.active { color: #3b82f6; }
-        .nav-item i { width: 1.4rem; height: 1.4rem; }
+const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
-        /* Itens de Lista Estilo App */
-        .item-row { transition: all 0.2s ease; border-width: 2px; border-style: solid; border-radius: 1.25rem; background: #1e293b; position: relative; }
-        .item-paid { background-color: rgba(16, 185, 129, 0.05); border-color: rgba(16, 185, 129, 0.2) !important; }
-        .item-unpaid { background-color: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.2) !important; }
-        
-        .input-field { background-color: #0f172a; color: #f1f5f9; border: 1px solid #334155; border-radius: 0.75rem; padding: 0.5rem 0.75rem; width: 100%; transition: all 0.2s; font-size: 0.85rem; }
-        .input-field:focus { border-color: #3b82f6; outline: none; }
+// --- COMPONENTE PRINCIPAL ---
+export default function App() {
+  const [data, setData] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : generateInitialData();
+    } catch (e) {
+      return generateInitialData();
+    }
+  });
 
-        .bank-input-live { background: transparent; border: none; font-size: 1.75rem; font-weight: 900; color: #10b981; text-align: center; width: 100%; outline: none; padding: 0; }
-        .bank-name-input { background: transparent; border: none; font-size: 0.7rem; font-weight: 900; color: #94a3b8; text-align: center; width: 100%; outline: none; text-transform: uppercase; letter-spacing: 0.05em; }
+  const [currentTab, setCurrentTab] = useState('dashboard'); 
+  const [darkMode, setDarkMode] = useState(true);
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(0); 
+  const fileInputRef = useRef(null);
 
-        .month-tab { padding: 0.6rem 1.2rem; border-radius: 2rem; transition: all 0.3s; opacity: 0.5; font-weight: 800; font-size: 0.75rem; white-space: nowrap; border: 1px solid transparent; }
-        .active-month-tab { opacity: 1; background: #3b82f6; color: white; border-color: #60a5fa; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3); }
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }, [data]);
 
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  function generateInitialData() {
+    const today = new Date();
+    const months = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      months.push({
+        id: generateId(),
+        label: MONTH_NAMES[d.getMonth()],
+        year: d.getFullYear(),
+        monthIndex: d.getMonth(),
+        transactions: [] 
+      });
+    }
 
-        /* Mini Toggle */
-        .toggle-switch { position: relative; display: inline-flex; width: 38px; height: 20px; flex-shrink: 0; }
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .4s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: #10b981; }
-        input:checked + .slider:before { transform: translateX(18px); }
+    return {
+      months,
+      accounts: [
+        { id: 'acc_1', name: 'Nubank', type: 'Conta Corrente', balance: 1250.00, color: 'bg-purple-600' },
+        { id: 'acc_2', name: 'Inter', type: 'Conta Corrente', balance: 3400.50, color: 'bg-orange-500' }
+      ],
+      creditCards: [
+        { id: 'card_1', name: 'Nubank Card', limit: 8000, closingDay: 10, dueDay: 17, color: 'bg-purple-600' }
+      ],
+      budgets: {
+        'Alimentação': 1800,
+        'Lazer': 600,
+        'Transporte': 800
+      },
+      goals: [
+        { id: 'goal_1', name: 'Carro Novo', target: 60000, current: 19200 }
+      ]
+    };
+  }
 
-        /* Badge do Banco */
-        .bank-tag { font-size: 0.6rem; padding: 3px 8px; border-radius: 6px; font-weight: 900; background: #0f172a; border: 1px solid #334155; cursor: pointer; display: inline-block; min-width: 35px; text-align: center; }
-        
-        .modal-overlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.85); z-index: 200; display: none; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(10px); }
-    </style>
-</head>
-<body class="pb-32">
+  // --- CRUD HELPERS ---
+  const updateTransactionsState = (newTransactions) => {
+    const updatedMonths = [...data.months];
+    updatedMonths[selectedMonthIndex] = {
+      ...updatedMonths[selectedMonthIndex],
+      transactions: newTransactions
+    };
+    setData({ ...data, months: updatedMonths });
+  };
 
-    <div id="save-indicator" class="fixed top-4 right-4 bg-emerald-500 text-white px-4 py-2 rounded-full text-xs font-bold hidden z-[300]">Sincronizado</div>
+  const addTransaction = (type, isFixed = false) => {
+    const newTrans = {
+      id: generateId(),
+      description: 'Novo Item',
+      value: 0,
+      type: type,
+      isFixed: isFixed,
+      category: 'Outros',
+      date: new Date().toISOString().split('T')[0],
+      status: 'pending',
+      accountId: data.accounts[0]?.id || 'cash'
+    };
+    updateTransactionsState([...data.months[selectedMonthIndex].transactions, newTrans]);
+  };
 
-    <!-- Header Fixo -->
-    <header class="p-6 pb-2">
-        <div class="flex justify-between items-center mb-6">
-            <div class="flex items-center gap-2" onclick="editAppTitle()">
-                <h1 id="app-display-title" class="text-xl font-black tracking-tighter uppercase">Finanças Pro</h1>
-                <i data-lucide="pencil" class="w-3 h-3 text-blue-400"></i>
-            </div>
-            <div class="flex gap-2">
-                <button onclick="openModal('settings-modal')" class="p-2 bg-slate-800 rounded-full text-slate-400"><i data-lucide="menu" class="w-5 h-5"></i></button>
-            </div>
+  const updateTransaction = (id, field, value) => {
+    const currentTrans = data.months[selectedMonthIndex].transactions;
+    const newTransList = currentTrans.map(t => t.id === id ? { ...t, [field]: value } : t);
+    updateTransactionsState(newTransList);
+  };
+
+  const deleteTransaction = (id) => {
+    if(!window.confirm("Deseja realmente excluir este lançamento?")) return;
+    const currentTrans = data.months[selectedMonthIndex].transactions;
+    const newTransList = currentTrans.filter(t => t.id !== id);
+    updateTransactionsState(newTransList);
+  };
+
+  // Helpers para Contas, Metas e Orçamentos
+  const addAccount = () => setData({ ...data, accounts: [...data.accounts, { id: generateId(), name: 'Nova Conta', type: 'Conta Corrente', balance: 0, color: 'bg-gray-600' }] });
+  const updateAccount = (id, f, v) => setData({ ...data, accounts: data.accounts.map(a => a.id === id ? { ...a, [f]: v } : a) });
+  const deleteAccount = (id) => window.confirm("Excluir conta?") && setData({ ...data, accounts: data.accounts.filter(a => a.id !== id) });
+
+  const addGoal = () => setData({ ...data, goals: [...data.goals, { id: generateId(), name: 'Nova Meta', target: 1000, current: 0 }] });
+  const updateGoal = (id, f, v) => setData({ ...data, goals: data.goals.map(g => g.id === id ? { ...g, [f]: v } : g) });
+  const deleteGoal = (id) => window.confirm("Excluir meta?") && setData({ ...data, goals: data.goals.filter(g => g.id !== id) });
+  
+  // -- Gerenciamento de Orçamentos (Budgets) --
+  const updateBudget = (cat, v) => {
+    setData({ ...data, budgets: { ...data.budgets, [cat]: parseFloat(v) || 0 } });
+  };
+  
+  const addBudget = () => {
+    // Simples prompt para adicionar nova categoria. Em um app real seria um modal.
+    const cat = window.prompt("Nome da Categoria (ex: Saúde, Educação):");
+    if (cat && !data.budgets[cat]) {
+      setData({ ...data, budgets: { ...data.budgets, [cat]: 0 } });
+    } else if (data.budgets[cat]) {
+      alert("Esta categoria já possui um orçamento definido.");
+    }
+  };
+
+  const deleteBudget = (cat) => {
+    if (!window.confirm(`Remover o orçamento de ${cat}?`)) return;
+    const newBudgets = { ...data.budgets };
+    delete newBudgets[cat];
+    setData({ ...data, budgets: newBudgets });
+  };
+
+  // --- CÁLCULOS FINANCEIROS ---
+  const currentMonth = data.months[selectedMonthIndex];
+  const financials = useMemo(() => {
+    const trans = currentMonth.transactions;
+    const income = trans.filter(t => t.type === 'income').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+    const expense = trans.filter(t => t.type === 'expense').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+    const accountsTotal = data.accounts.reduce((acc, a) => acc + (parseFloat(a.balance) || 0), 0);
+    const pendingIncome = trans.filter(t => t.type === 'income' && t.status === 'pending').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+    const pendingExpense = trans.filter(t => t.type === 'expense' && t.status === 'pending').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+    const projected = accountsTotal + pendingIncome - pendingExpense;
+    return { income, expense, balance: accountsTotal, projected };
+  }, [currentMonth, data.accounts]);
+
+  // Backup
+  const handleExport = () => {
+    const a = document.createElement('a');
+    a.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
+    a.download = "backup_financas.json";
+    a.click();
+  };
+  const handleImport = (e) => {
+    const fr = new FileReader();
+    fr.onload = ev => { try { setData(JSON.parse(ev.target.result)); alert("Sucesso!"); } catch { alert("Erro."); } };
+    fr.readAsText(e.target.files[0]);
+  };
+
+  return (
+    <div className={`flex flex-col h-screen font-sans transition-colors duration-300 ${darkMode ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'}`}>
+      
+      {/* HEADER */}
+      <header className={`px-4 py-3 flex justify-between items-center border-b ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+            <TrendingUp size={18} />
+          </div>
+          <div>
+            <h1 className="font-bold text-lg leading-none">Finanças<span className="text-blue-500">Pro</span></h1>
+            <span className="text-[10px] opacity-60 font-medium tracking-wider">ULTIMATE V7</span>
+          </div>
         </div>
-
-        <!-- Abas de Meses (Scroll Horizontal) -->
-        <div class="flex overflow-x-auto no-scrollbar gap-2 mb-2" id="month-tabs-container"></div>
-    </header>
-
-    <main class="px-6" id="main-content">
-        <!-- Renderizado dinamicamente pelo changeView() -->
-    </main>
-
-    <!-- Navegação Inferior -->
-    <nav class="bottom-nav">
-        <div class="nav-item active" id="nav-overview" onclick="changeView('overview')">
-            <i data-lucide="layout-dashboard"></i>
-            <span>Resumo</span>
+        <div className="flex items-center gap-2">
+           <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full transition-colors ${darkMode ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
+             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+           </button>
         </div>
-        <div class="nav-item" id="nav-transactions" onclick="changeView('transactions')">
-            <i data-lucide="receipt"></i>
-            <span>Contas</span>
-        </div>
-        <div class="nav-item" id="nav-wallet" onclick="changeView('wallet')">
-            <i data-lucide="wallet"></i>
-            <span>Carteira</span>
-        </div>
-    </nav>
+      </header>
 
-    <!-- Modal Global de Configurações -->
-    <div id="settings-modal" class="modal-overlay">
-        <div class="card w-full max-w-sm text-center">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-lg font-black uppercase">Menu do App</h2>
-                <button onclick="closeModal('settings-modal')" class="p-2 hover:bg-slate-700 rounded-full"><i data-lucide="x"></i></button>
-            </div>
-            <div class="space-y-3">
-                <button onclick="openModal('global-tool-modal'); closeModal('settings-modal');" class="btn btn-warning w-full py-4"><i data-lucide="zap"></i> Adição Recorrente</button>
-                <button onclick="advanceTimeline()" class="btn btn-secondary w-full py-4 text-red-400"><i data-lucide="fast-forward"></i> Encerrar Mês Atual</button>
-                <div class="border-t border-slate-700 pt-4 flex gap-2">
-                    <button onclick="downloadBackup()" class="btn bg-slate-700 w-1/2 py-3">Exportar</button>
-                    <input type="file" id="importFile" class="hidden" accept=".json" onchange="handleImport(this)">
-                    <button onclick="document.getElementById('importFile').click()" class="btn bg-slate-700 w-1/2 py-3">Importar</button>
-                </div>
-            </div>
+      {/* NAVEGAÇÃO DE MESES */}
+      <div className={`flex items-center gap-1 overflow-x-auto no-scrollbar py-2 px-2 border-b ${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-slate-200'}`}>
+        {data.months.map((m, idx) => (
+          <button key={m.id} onClick={() => setSelectedMonthIndex(idx)}
+            className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${selectedMonthIndex === idx ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:bg-zinc-800'}`}>
+            {m.label} <span className="opacity-60 font-normal ml-1">{m.year}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* CONTEÚDO PRINCIPAL */}
+      <main className="flex-1 overflow-y-auto custom-scrollbar pb-24 p-4 space-y-6">
+        
+        {currentTab === 'dashboard' && (
+          <DashboardView financials={financials} darkMode={darkMode} data={data} selectedMonthIndex={selectedMonthIndex} categories={CATEGORIES} />
+        )}
+
+        {currentTab === 'transactions' && (
+          <TransactionsView 
+            transactions={currentMonth.transactions}
+            darkMode={darkMode}
+            onAdd={addTransaction}
+            onUpdate={updateTransaction}
+            onDelete={deleteTransaction}
+          />
+        )}
+
+        {currentTab === 'planning' && (
+          <PlanningView 
+            budgets={data.budgets} goals={data.goals} 
+            transactions={currentMonth.transactions} 
+            darkMode={darkMode}
+            onAddGoal={addGoal} onUpdateGoal={updateGoal} onDeleteGoal={deleteGoal} 
+            onUpdateBudget={updateBudget} onAddBudget={addBudget} onDeleteBudget={deleteBudget}
+          />
+        )}
+
+        {currentTab === 'accounts' && (
+          <AccountsView 
+            accounts={data.accounts} cards={data.creditCards} darkMode={darkMode}
+            onAddAccount={addAccount} onUpdateAccount={updateAccount} onDeleteAccount={deleteAccount}
+            onExport={handleExport} fileInputRef={fileInputRef} onImport={handleImport}
+          />
+        )}
+      </main>
+
+      {/* BOTTOM NAV */}
+      <nav className={`fixed bottom-0 left-0 w-full border-t z-50 pb-safe ${darkMode ? 'bg-zinc-900/95 border-zinc-800 backdrop-blur-md' : 'bg-white/95 border-slate-200'}`}>
+        <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
+          <NavItem icon={<LayoutDashboard size={20} />} label="Visão Geral" isActive={currentTab === 'dashboard'} onClick={() => setCurrentTab('dashboard')} />
+          <NavItem icon={<List size={20} />} label="Extrato" isActive={currentTab === 'transactions'} onClick={() => setCurrentTab('transactions')} />
+          <NavItem icon={<Target size={20} />} label="Planejamento" isActive={currentTab === 'planning'} onClick={() => setCurrentTab('planning')} />
+          <NavItem icon={<Wallet size={20} />} label="Carteira" isActive={currentTab === 'accounts'} onClick={() => setCurrentTab('accounts')} />
         </div>
+      </nav>
     </div>
+  );
+}
 
-    <!-- Modal Adição Global -->
-    <div id="global-tool-modal" class="modal-overlay">
-        <div class="card w-full max-w-lg">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-lg font-black text-yellow-400 uppercase">Item em Massa</h2>
-                <button onclick="closeModal('global-tool-modal')" class="p-2 hover:bg-slate-700 rounded-full"><i data-lucide="x"></i></button>
-            </div>
-            <div class="space-y-4">
-                <div class="grid grid-cols-2 gap-3">
-                    <input type="text" id="global-name" placeholder="Nome" class="input-field">
-                    <input type="number" id="global-value" placeholder="Valor" class="input-field">
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <select id="global-type" class="input-field">
-                        <option value="fixed">Dívida Fixa</option>
-                        <option value="variable">Dívida Variável</option>
-                        <option value="income">Entrada</option>
-                    </select>
-                    <input type="date" id="global-date" class="input-field">
-                </div>
-                <button onclick="applyGlobalItem()" class="btn btn-primary w-full py-4 font-black">LANÇAR EM TODOS OS MESES</button>
-            </div>
+// --- SUB-VIEWS ---
+
+function TransactionsView({ transactions, darkMode, onAdd, onUpdate, onDelete }) {
+  const [activeSubTab, setActiveSubTab] = useState('all'); 
+
+  const filteredTransactions = transactions.filter(t => {
+    if (activeSubTab === 'fixed') return t.isFixed && t.type === 'expense';
+    if (activeSubTab === 'variable') return !t.isFixed && t.type === 'expense';
+    return true; 
+  }).sort((a,b) => new Date(b.date) - new Date(a.date));
+
+  const totalFiltered = filteredTransactions.reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+
+  return (
+    <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+      
+      <div className={`p-1 rounded-xl flex ${darkMode ? 'bg-zinc-900' : 'bg-slate-100'}`}>
+        <button onClick={() => setActiveSubTab('all')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'all' ? (darkMode ? 'bg-zinc-800 text-white shadow' : 'bg-white text-slate-800 shadow') : 'text-zinc-500'}`}>Cronologia</button>
+        <button onClick={() => setActiveSubTab('fixed')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'fixed' ? (darkMode ? 'bg-zinc-800 text-white shadow' : 'bg-white text-slate-800 shadow') : 'text-zinc-500'}`}>Fixas</button>
+        <button onClick={() => setActiveSubTab('variable')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'variable' ? (darkMode ? 'bg-zinc-800 text-white shadow' : 'bg-white text-slate-800 shadow') : 'text-zinc-500'}`}>Variáveis</button>
+      </div>
+
+      {activeSubTab !== 'all' && (
+        <div className={`p-4 rounded-2xl flex justify-between items-center ${darkMode ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-slate-200'}`}>
+           <div className="flex items-center gap-2">
+             <div className={`p-2 rounded-lg ${activeSubTab === 'fixed' ? 'bg-blue-500/10 text-blue-500' : 'bg-orange-500/10 text-orange-500'}`}>
+               {activeSubTab === 'fixed' ? <Repeat size={18} /> : <ShoppingCart size={18} />}
+             </div>
+             <div>
+               <h3 className="font-bold text-sm">{activeSubTab === 'fixed' ? 'Despesas Fixas' : 'Despesas Variáveis'}</h3>
+               <p className="text-[10px] opacity-60">{filteredTransactions.length} itens</p>
+             </div>
+           </div>
+           <p className="text-xl font-bold">{formatCurrency(totalFiltered)}</p>
         </div>
-    </div>
+      )}
 
-    <div id="cashflow-modal-overlay" class="modal-overlay">
-        <div class="card w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-black uppercase" id="cashflow-title">Fluxo de Caixa</h2>
-                <button onclick="closeModal('cashflow-modal-overlay')" class="p-2 hover:bg-slate-700 rounded-full"><i data-lucide="x"></i></button>
-            </div>
-            <div class="overflow-y-auto pr-2 no-scrollbar" id="cashflow-content"></div>
+      <div className={`rounded-2xl overflow-hidden border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+        {filteredTransactions.length === 0 && (
+          <div className="p-8 text-center opacity-50 text-sm">Nenhum lançamento encontrado.</div>
+        )}
+        {filteredTransactions.map((t, idx) => (
+          <div key={t.id} className={`p-4 flex items-center justify-between gap-3 group ${idx !== filteredTransactions.length - 1 ? (darkMode ? 'border-b border-zinc-800' : 'border-b border-slate-100') : ''}`}>
+             
+             <div className="flex items-center gap-3 flex-1 min-w-0">
+               <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${CATEGORIES[t.category]?.bg || (darkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-slate-100 text-slate-500')}`}>
+                 {CATEGORIES[t.category]?.icon || <Circle size={16} />}
+               </div>
+               
+               <div className="flex flex-col flex-1 min-w-0">
+                 <input 
+                   value={t.description} 
+                   onChange={(e) => onUpdate(t.id, 'description', e.target.value)}
+                   className={`bg-transparent outline-none font-semibold text-sm w-full truncate ${darkMode ? 'text-zinc-200 placeholder-zinc-600' : 'text-slate-800 placeholder-slate-400'}`}
+                   placeholder="Descrição"
+                 />
+                 <div className="flex items-center gap-2 mt-0.5">
+                   <div className="flex items-center gap-1 text-[10px] opacity-60">
+                     <CalendarDays size={10} />
+                     <input type="date" value={t.date} onChange={(e) => onUpdate(t.id, 'date', e.target.value)} className="bg-transparent outline-none" />
+                   </div>
+                   <span className="text-[10px] opacity-40">•</span>
+                   <select 
+                      value={t.category} 
+                      onChange={(e) => onUpdate(t.id, 'category', e.target.value)}
+                      className={`bg-transparent text-[10px] outline-none font-medium ${darkMode ? 'text-zinc-400' : 'text-slate-500'}`}
+                   >
+                     {Object.keys(CATEGORIES).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                   </select>
+                 </div>
+               </div>
+             </div>
+
+             <div className="text-right flex flex-col items-end gap-1">
+               <input 
+                 type="number" 
+                 value={t.value} 
+                 onChange={(e) => onUpdate(t.id, 'value', e.target.value)}
+                 className={`bg-transparent outline-none font-bold text-sm text-right w-24 ${t.type === 'income' ? 'text-emerald-500' : (darkMode ? 'text-zinc-200' : 'text-slate-800')}`}
+               />
+               
+               <div className="flex items-center gap-2">
+                 <button onClick={() => onDelete(t.id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                   <Trash2 size={12} />
+                 </button>
+                 
+                 <button onClick={() => onUpdate(t.id, 'status', t.status === 'paid' ? 'pending' : 'paid')} 
+                   className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${t.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' : (darkMode ? 'bg-zinc-800 text-zinc-500' : 'bg-slate-100 text-slate-400')}`}>
+                   {t.status === 'paid' ? 'Pago' : 'Pendente'}
+                 </button>
+               </div>
+             </div>
+
+          </div>
+        ))}
+      </div>
+
+      <div className="fixed bottom-20 right-4 flex flex-col gap-3 z-40">
+        {activeSubTab === 'all' ? (
+          <>
+            <button onClick={() => onAdd('income')} className="shadow-lg shadow-emerald-500/30 w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform"><TrendingUp size={20} /></button>
+            <button onClick={() => onAdd('expense')} className="shadow-lg shadow-red-500/30 w-14 h-14 rounded-full bg-red-500 text-white flex items-center justify-center hover:scale-105 transition-transform"><Plus size={24} /></button>
+          </>
+        ) : (
+          <button onClick={() => onAdd('expense', activeSubTab === 'fixed')} className={`shadow-lg w-14 h-14 rounded-full text-white flex items-center justify-center hover:scale-105 transition-transform ${activeSubTab === 'fixed' ? 'bg-blue-600 shadow-blue-500/30' : 'bg-orange-500 shadow-orange-500/30'}`}>
+            <Plus size={24} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DashboardView({ financials, darkMode, data, selectedMonthIndex, categories }) {
+  const expenses = data.months[selectedMonthIndex].transactions.filter(t => t.type === 'expense');
+  const catTotals = {};
+  expenses.forEach(t => { const cat = t.category || 'Outros'; catTotals[cat] = (catTotals[cat] || 0) + (parseFloat(t.value) || 0); });
+  const sortedCats = Object.entries(catTotals).sort((a,b) => b[1] - a[1]).slice(0, 4);
+  const maxCatVal = sortedCats[0]?.[1] || 1;
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="relative rounded-3xl overflow-hidden bg-blue-600 text-white shadow-xl shadow-blue-900/20 p-6">
+        <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+        <div className="relative z-10">
+          <p className="text-blue-200 text-xs font-medium uppercase tracking-wider mb-1">Saldo Consolidado</p>
+          <h2 className="text-3xl font-bold tracking-tight mb-4">{formatCurrency(financials.balance)}</h2>
+          <div className="flex justify-between text-blue-100 text-xs mt-2 pt-4 border-t border-white/20">
+            <span>Projeção Final de Mês</span>
+            <span className="font-bold text-white">{formatCurrency(financials.projected)}</span>
+          </div>
         </div>
-    </div>
+      </div>
 
-    <div id="confirm-modal-overlay" class="modal-overlay">
-        <div class="card w-full max-w-xs text-center">
-            <h3 class="text-lg font-black mb-2 uppercase">Confirmar?</h3>
-            <p class="text-slate-400 text-sm mb-6" id="confirm-body"></p>
-            <div class="flex justify-center gap-3">
-                <button id="confirm-btn-yes" class="btn btn-primary px-10">Sim</button>
-                <button onclick="closeModal('confirm-modal-overlay')" class="btn btn-secondary">Não</button>
-            </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className={`p-5 rounded-3xl text-white bg-emerald-500 shadow-lg shadow-emerald-500/20 relative overflow-hidden`}>
+          <div className="relative z-10"><div className="flex items-center gap-2 mb-2 opacity-90"><div className="p-1.5 bg-white/20 rounded-lg"><TrendingUp size={16} /></div><span className="text-xs font-bold uppercase tracking-wider">Receitas</span></div><h3 className="text-xl font-bold">{formatCurrency(financials.income)}</h3></div>
         </div>
+        <div className={`p-5 rounded-3xl text-white bg-red-500 shadow-lg shadow-red-500/20 relative overflow-hidden`}>
+          <div className="relative z-10"><div className="flex items-center gap-2 mb-2 opacity-90"><div className="p-1.5 bg-white/20 rounded-lg"><TrendingDown size={16} /></div><span className="text-xs font-bold uppercase tracking-wider">Despesas</span></div><h3 className="text-xl font-bold">{formatCurrency(financials.expense)}</h3></div>
+        </div>
+      </div>
+
+      <div className={`p-5 rounded-3xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+        <h3 className="font-bold text-sm mb-4">Top Despesas</h3>
+        <div className="space-y-4">
+          {sortedCats.length > 0 ? sortedCats.map(([cat, val]) => (
+            <div key={cat}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className={darkMode ? 'text-zinc-300' : 'text-slate-700'}>{cat}</span>
+                <span className="font-bold opacity-70">{formatCurrency(val)}</span>
+              </div>
+              <div className={`h-2 w-full rounded-full overflow-hidden ${darkMode ? 'bg-zinc-800' : 'bg-slate-100'}`}>
+                <div className="h-full rounded-full" style={{ width: `${(val / maxCatVal) * 100}%`, backgroundColor: categories[cat]?.color || '#888' }}></div>
+              </div>
+            </div>
+          )) : <p className="text-xs text-center opacity-50">Sem despesas registradas.</p>}
+        </div>
+      </div>
     </div>
+  );
+}
 
-    <script>
-        const STORAGE_KEY = 'financialData_App_v39_final';
-        const TITLE_KEY = 'financialApp_Title_v39';
-        const HORA_EXTRA_RATE = 21;
-        const MONTH_NAMES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-        
-        let timeline = [];
-        let activeIndex = 0;
-        let currentView = 'overview';
-        let globalChart = null;
+function PlanningView({ budgets, goals, transactions, darkMode, onAddGoal, onUpdateGoal, onDeleteGoal, onUpdateBudget, onAddBudget, onDeleteBudget }) {
+  // Cálculo de Gastos por Categoria
+  const spendingByCat = useMemo(() => {
+    const totals = {};
+    transactions.filter(t => t.type === 'expense').forEach(t => {
+       const cat = t.category || 'Outros';
+       totals[cat] = (totals[cat] || 0) + (parseFloat(t.value) || 0);
+    });
+    return totals;
+  }, [transactions]);
 
-        function initApp() {
-            const savedTitle = localStorage.getItem(TITLE_KEY);
-            if (savedTitle) { document.getElementById('app-display-title').innerText = savedTitle; }
-            
-            let saved = localStorage.getItem(STORAGE_KEY);
-            if (!saved) saved = localStorage.getItem('financialData_App_v38_stable');
-            
-            if (saved) {
-                timeline = JSON.parse(saved);
-                migrateToV39();
-            } else {
-                createInitialTimeline();
-            }
-            renderAll();
-        }
-
-        function createInitialTimeline() {
-            let now = new Date();
-            let startMonth = now.getMonth();
-            let startYear = now.getFullYear();
-            timeline = [];
-            for (let i = 0; i < 6; i++) {
-                let mIdx = (startMonth + i) % 12;
-                let yOff = Math.floor((startMonth + i) / 12);
-                timeline.push({ 
-                    label: MONTH_NAMES[mIdx], 
-                    year: startYear + yOff, 
-                    bank1Name: 'BANCO DO BRASIL',
-                    bank2Name: 'MERCADO PAGO',
-                    bank1Balance: 0, 
-                    bank2Balance: 0,
-                    data: createEmptyMonthData(mIdx, startYear + yOff) 
-                });
-            }
-            saveData();
-        }
-
-        function createEmptyMonthData(mIdx, year) {
-            const firstDay = new Date(year, mIdx, 1).toISOString().slice(0, 10);
-            return {
-                incomeEntries: [{ id: 'saldo-sys', name: 'Saldo Anterior', value: 0, isSystem: true, date: firstDay }],
-                fixedExpensesEntries: [],
-                variableExpensesEntries: []
-            };
-        }
-
-        function migrateToV39() {
-            timeline.forEach(m => {
-                if (m.bank1Name === undefined) m.bank1Name = 'BANCO DO BRASIL';
-                if (m.bank2Name === undefined) m.bank2Name = 'MERCADO PAGO';
-                // Migração de chaves de versões v37/v38
-                if (m.bankBB !== undefined) { m.bank1Balance = m.bankBB; delete m.bankBB; }
-                if (m.bankMP !== undefined) { m.bank2Balance = m.bankMP; delete m.bankMP; }
-                if (m.data) {
-                    const all = [...(m.data.fixedExpensesEntries || []), ...(m.data.variableExpensesEntries || [])];
-                    all.forEach(item => { 
-                        if (item.source === undefined) item.source = 'B1';
-                        // Normalização de fontes antigas
-                        if (item.source === 'BB') item.source = 'B1';
-                        if (item.source === 'MP') item.source = 'B2';
-                    });
-                }
-            });
-            saveData();
-        }
-
-        function saveData() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(timeline));
-            const indicator = document.getElementById('save-indicator');
-            if (indicator) { indicator.classList.remove('hidden'); setTimeout(() => { indicator.classList.add('hidden'); }, 2000); }
-        }
-
-        function changeView(view) {
-            currentView = view;
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            document.getElementById(`nav-${view}`).classList.add('active');
-            renderCurrentView();
-        }
-
-        function renderCurrentView() {
-            const m = timeline[activeIndex];
-            const container = document.getElementById('main-content');
-            container.innerHTML = '';
-            if (currentView === 'overview') renderOverviewPage(m, activeIndex);
-            else if (currentView === 'transactions') renderTransactionsPage(m, activeIndex);
-            else if (currentView === 'wallet') renderWalletPage(m, activeIndex);
-            lucide.createIcons();
-        }
-
-        function renderOverviewPage(m, idx) {
-            const d = m.data;
-            const inc = d.incomeEntries.reduce((s, x) => s + (x.isCalculated ? (x.hours * x.rate) : (x.value || 0)), 0);
-            const fixP = d.fixedExpensesEntries.reduce((s, x) => s + (x.isPaid ? x.value : 0), 0);
-            const fixT = d.fixedExpensesEntries.reduce((s, x) => s + (x.value || 0), 0);
-            const varP = d.variableExpensesEntries.reduce((s, x) => s + (x.isPaid ? x.value : 0), 0);
-            const varT = d.variableExpensesEntries.reduce((s, x) => s + (x.value || 0), 0);
-            const totalT = fixT + varT;
-            const bal = inc - totalT;
-            const prog = totalT > 0 ? (((fixP + varP) / totalT) * 100).toFixed(0) : 0;
-
-            document.getElementById('main-content').innerHTML = `
-                <div class="view-section active space-y-6">
-                    <div class="card bg-gradient-to-br from-blue-600 to-indigo-800 border-none">
-                        <p class="text-[10px] font-black text-blue-200 uppercase mb-1 opacity-80 tracking-widest text-center">Saldo Previsto Final</p>
-                        <h2 class="text-4xl font-black text-white text-center">${formatBRL(bal)}</h2>
-                        <div class="mt-8 grid grid-cols-2 border-t border-white/10 pt-4">
-                            <div class="text-center border-r border-white/10"><p class="text-[9px] font-black text-blue-200 uppercase opacity-70">Renda Total</p><p class="text-md font-black text-white">${formatBRL(inc)}</p></div>
-                            <div class="text-center"><p class="text-[9px] font-black text-blue-200 uppercase opacity-70">Despesas</p><p class="text-md font-black text-white">${formatBRL(totalT)}</p></div>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="flex justify-between items-center mb-3">
-                            <h3 class="text-[10px] font-black uppercase text-slate-500 tracking-widest">Contas Pagas</h3>
-                            <span class="text-xs font-black text-emerald-400">${prog}%</span>
-                        </div>
-                        <div class="w-full bg-slate-700/50 h-3 rounded-full overflow-hidden">
-                            <div class="bg-emerald-500 h-full transition-all duration-1000" style="width: ${prog}%"></div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4 mt-6">
-                            <div class="flex items-center gap-3"><div class="p-2.5 bg-blue-500/10 rounded-2xl"><i data-lucide="lock" class="w-4 h-4 text-blue-400"></i></div><div><p class="text-[8px] font-bold text-slate-500 uppercase">Fixas</p><p class="text-xs font-black">${formatBRL(fixT)}</p></div></div>
-                            <div class="flex items-center gap-3"><div class="p-2.5 bg-orange-500/10 rounded-2xl"><i data-lucide="shopping-bag" class="w-4 h-4 text-orange-400"></i></div><div><p class="text-[8px] font-bold text-slate-500 uppercase">Variáveis</p><p class="text-xs font-black">${formatBRL(varT)}</p></div></div>
-                        </div>
-                    </div>
-                    <button onclick="showCashFlow(${idx})" class="btn bg-slate-800 w-full py-5 rounded-3xl border border-slate-700 font-black uppercase tracking-widest text-blue-400 active:scale-95 shadow-lg">
-                        <i data-lucide="bar-chart-2" class="w-4 h-4"></i> Fluxo Detalhado
-                    </button>
-                    <div class="card h-52">
-                        <h3 class="text-[10px] font-black uppercase text-slate-600 mb-4 text-center tracking-widest">Gráfico Mensal</h3>
-                        <canvas id="overviewChart"></canvas>
-                    </div>
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-bold text-sm flex items-center gap-2"><Target size={16} /> Meus Objetivos</h3>
+          <button onClick={onAddGoal} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded">+ Novo</button>
+        </div>
+        <div className="space-y-3">
+          {goals.map(goal => {
+            const percent = Math.min(100, (goal.current / goal.target) * 100).toFixed(0);
+            return (
+              <div key={goal.id} className={`p-5 rounded-3xl border relative ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                <div className="flex justify-between mb-4">
+                  <input value={goal.name} onChange={(e) => onUpdateGoal(goal.id, 'name', e.target.value)} className="bg-transparent font-bold text-lg outline-none w-full" />
+                  <button onClick={() => onDeleteGoal(goal.id)} className="text-red-500"><Trash2 size={14} /></button>
                 </div>
-            `;
-            setTimeout(initOverviewChart, 100);
-        }
-
-        function renderTransactionsPage(m, idx) {
-            document.getElementById('main-content').innerHTML = `
-                <div class="view-section active space-y-8">
-                    <section>
-                        <div class="flex justify-between items-center mb-4"><h3 class="text-xs font-black text-emerald-400 uppercase tracking-widest">Entradas</h3><button onclick="addItem(${idx}, 'income')" class="text-[10px] font-black text-slate-400 bg-slate-800/50 px-4 py-1.5 rounded-full uppercase border border-slate-700">+ Adicionar</button></div>
-                        <div id="list-income-${idx}" class="space-y-3"></div>
-                    </section>
-                    <section>
-                        <div class="flex justify-between items-center mb-4"><h3 class="text-xs font-black text-blue-400 uppercase tracking-widest">Contas Fixas</h3><button onclick="addItem(${idx}, 'fixed')" class="text-[10px] font-black text-slate-400 bg-slate-800/50 px-4 py-1.5 rounded-full uppercase border border-slate-700">+ Adicionar</button></div>
-                        <div id="list-fixed-${idx}" class="space-y-3"></div>
-                    </section>
-                    <section>
-                        <div class="flex justify-between items-center mb-4"><h3 class="text-xs font-black text-orange-400 uppercase tracking-widest">Variáveis</h3><button onclick="addItem(${idx}, 'variable')" class="text-[10px] font-black text-slate-400 bg-slate-800/50 px-4 py-1.5 rounded-full uppercase border border-slate-700">+ Adicionar</button></div>
-                        <div id="list-variable-${idx}" class="space-y-3"></div>
-                    </section>
+                <div className="flex justify-between items-end">
+                   <div>
+                     <p className="text-[10px] opacity-60">Atual</p>
+                     <div className="flex items-center gap-1">
+                       <span className="text-xs">R$</span>
+                       <input type="number" value={goal.current} onChange={(e) => onUpdateGoal(goal.id, 'current', e.target.value)} className="bg-transparent font-bold text-xl text-blue-500 outline-none w-24" />
+                     </div>
+                   </div>
+                   <div className="text-right">
+                     <p className="text-[10px] opacity-60">Meta</p>
+                     <input type="number" value={goal.target} onChange={(e) => onUpdateGoal(goal.id, 'target', e.target.value)} className="bg-transparent font-bold text-sm text-right outline-none w-20" />
+                   </div>
                 </div>
-            `;
-            renderMonthLists(idx);
-        }
-
-        function renderWalletPage(m, idx) {
-            const all = [...m.data.fixedExpensesEntries, ...m.data.variableExpensesEntries];
-            const liveB1 = (m.bank1Balance || 0) - all.filter(x => x.isPaid && x.source === 'B1').reduce((s, x) => s + x.value, 0);
-            const liveB2 = (m.bank2Balance || 0) - all.filter(x => x.isPaid && x.source === 'B2').reduce((s, x) => s + x.value, 0);
-
-            document.getElementById('main-content').innerHTML = `
-                <div class="view-section active space-y-6">
-                    <div class="text-center mb-2"><h2 class="text-[10px] font-black text-slate-600 uppercase tracking-tighter">Carteira Viva (Saldo Atual)</h2></div>
-                    
-                    <!-- Banco 1 -->
-                    <div class="card border-blue-500/20 bg-blue-900/5 text-center py-10">
-                        <input type="text" value="${m.bank1Name}" onchange="updateBankName(${idx}, 'bank1Name', this.value)" class="bank-name-input mb-3" placeholder="NOME DO BANCO 1">
-                        <div class="flex items-center justify-center font-black">
-                            <span class="text-2xl text-blue-500 mr-2">R$</span>
-                            <input type="number" step="0.01" value="${liveB1.toFixed(2)}" onchange="handleWalletEdit(${idx}, 'bank1Balance', this.value)" class="bank-input-live" style="color: ${liveB1 >= 0 ? '#10b981' : '#ef4444'}">
-                        </div>
-                    </div>
-
-                    <!-- Banco 2 -->
-                    <div class="card border-emerald-500/20 bg-emerald-900/5 text-center py-10">
-                        <input type="text" value="${m.bank2Name}" onchange="updateBankName(${idx}, 'bank2Name', this.value)" class="bank-name-input mb-3" placeholder="NOME DO BANCO 2">
-                        <div class="flex items-center justify-center font-black">
-                            <span class="text-2xl text-emerald-500 mr-2">R$</span>
-                            <input type="number" step="0.01" value="${liveB2.toFixed(2)}" onchange="handleWalletEdit(${idx}, 'bank2Balance', this.value)" class="bank-input-live" style="color: ${liveB2 >= 0 ? '#10b981' : '#ef4444'}">
-                        </div>
-                    </div>
-
-                    <div class="p-4 bg-slate-900/50 rounded-2xl border border-slate-800">
-                         <p class="text-[9px] text-slate-600 font-bold leading-relaxed text-center uppercase tracking-widest">Toque nos nomes acima para renomear os seus bancos. Toque nos valores para definir o saldo que você tem hoje.</p>
-                    </div>
+                <div className="h-2 w-full rounded-full bg-zinc-800 mt-3 overflow-hidden">
+                   <div className="h-full bg-blue-500 transition-all" style={{ width: `${percent}%` }}></div>
                 </div>
-            `;
-        }
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
-        // --- CORE ---
-        function renderAll() {
-            const tabs = document.getElementById('month-tabs-container');
-            if (tabs) tabs.innerHTML = timeline.map((m, i) => `<button onclick="selecionarMes(${i})" class="month-tab ${i === activeIndex ? 'active-month-tab' : 'bg-slate-800/40 text-slate-500'}">${m.label}</button>`).join('') + `<button onclick="addNewMonthManual()" class="month-tab bg-slate-800/40 text-slate-400">+</button>`;
-            renderCurrentView();
-        }
+      <div>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-bold text-sm flex items-center gap-2"><PieChart size={16} /> Tetos de Gastos</h3>
+          <button onClick={onAddBudget} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded">+ Novo</button>
+        </div>
+        <div className="space-y-3">
+          {Object.entries(budgets).map(([cat, limit]) => {
+            const spent = spendingByCat[cat] || 0;
+            const percent = Math.min(100, (spent / (limit || 1)) * 100);
+            const remaining = limit - spent;
+            const isOver = spent > limit;
+            const isNear = percent > 75;
 
-        function selecionarMes(idx) { activeIndex = idx; renderAll(); }
+            // Define cor da barra baseado no status
+            let barColor = 'bg-emerald-500';
+            let textColor = 'text-emerald-500';
+            if (isOver) { barColor = 'bg-red-500'; textColor = 'text-red-500'; }
+            else if (isNear) { barColor = 'bg-orange-500'; textColor = 'text-orange-500'; }
 
-        function updateBankName(idx, field, val) {
-            timeline[idx][field] = val.toUpperCase() || (field === 'bank1Name' ? 'BANCO 1' : 'BANCO 2');
-            saveData();
-            // Nao precisa re-renderizar a pagina toda pra nao perder o foco do input
-        }
+            return (
+              <div key={cat} className={`p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                
+                {/* Linha Superior: Ícone, Nome e Input de Limite */}
+                <div className="flex justify-between items-center mb-3">
+                   <div className="flex items-center gap-2">
+                     <div className={`p-1.5 rounded-lg ${darkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>
+                       {CATEGORIES[cat]?.icon || <Circle size={16} />}
+                     </div>
+                     <span className="font-bold text-sm">{cat}</span>
+                   </div>
+                   <div className="flex items-center gap-2">
+                     <div className="flex items-center gap-1">
+                       <span className="text-[10px] font-bold opacity-50">Teto:</span>
+                       <input 
+                         type="number" 
+                         value={limit} 
+                         onChange={(e) => onUpdateBudget(cat, e.target.value)} 
+                         className={`bg-transparent font-bold text-right w-16 outline-none border-b border-dashed ${darkMode ? 'border-zinc-700 focus:border-blue-500' : 'border-zinc-300 focus:border-blue-500'}`} 
+                       />
+                     </div>
+                     {/* Botão de Excluir Orçamento */}
+                     <button onClick={() => onDeleteBudget(cat)} className="text-zinc-500 hover:text-red-500 transition-colors p-1">
+                       <Trash2 size={14} />
+                     </button>
+                   </div>
+                </div>
 
-        function handleWalletEdit(mIdx, field, val) {
-            const m = timeline[mIdx];
-            const sourceKey = field === 'bank1Balance' ? 'B1' : 'B2';
-            const sumPaid = [...m.data.fixedExpensesEntries, ...m.data.variableExpensesEntries].filter(x => x.isPaid && x.source === sourceKey).reduce((s, x) => s + x.value, 0);
-            m[field] = (parseFloat(val) || 0) + sumPaid;
-            saveData();
-            renderCurrentView();
-        }
+                {/* Barra de Progresso Real */}
+                <div className={`h-2.5 w-full rounded-full overflow-hidden ${darkMode ? 'bg-zinc-800' : 'bg-zinc-100'}`}>
+                   <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${Math.min(percent, 100)}%` }}></div>
+                </div>
 
-        function renderMonthLists(mIdx) {
-            const m = timeline[mIdx];
-            renderItemList(mIdx, 'income', m.data.incomeEntries);
-            renderItemList(mIdx, 'fixed', m.data.fixedExpensesEntries);
-            renderItemList(mIdx, 'variable', m.data.variableExpensesEntries);
-        }
+                {/* Linha Inferior: Status e Restante */}
+                <div className="flex justify-between items-center mt-2 text-[10px]">
+                   <span className="opacity-60">Gasto: <span className={darkMode ? 'text-zinc-300' : 'text-zinc-800'}>{formatCurrency(spent)}</span></span>
+                   
+                   {isOver ? (
+                     <span className="font-bold text-red-500 flex items-center gap-1">
+                       <AlertTriangle size={10} /> Excedido em {formatCurrency(Math.abs(remaining))}
+                     </span>
+                   ) : (
+                     <span className={`font-bold ${textColor}`}>
+                       Resta {formatCurrency(remaining)}
+                     </span>
+                   )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        function renderItemList(mIdx, type, items) {
-            const container = document.getElementById(`list-${type}-${mIdx}`);
-            if (!container) return;
-            const b1Name = timeline[mIdx].bank1Name.substring(0,3);
-            const b2Name = timeline[mIdx].bank2Name.substring(0,3);
-
-            container.innerHTML = items.map(item => {
-                const isPaid = item.isPaid !== undefined ? item.isPaid : true;
-                let valHtml = `<input type="number" step="0.01" value="${item.value || 0}" class="bg-transparent border-none p-0 text-[0.9rem] font-black w-20 text-right focus:ring-0" onchange="updateValue(${mIdx},'${type}','${item.id}',this.value)" ${item.isCalculated || item.isSystem ? 'readonly' : ''}>`;
-                if (item.isCalculated) {
-                    const tot = (item.hours||0)*(item.rate||0);
-                    valHtml = `<div class="flex items-center gap-1 font-black text-xs text-slate-500"><input type="number" value="${item.hours || 0}" class="bg-slate-900 rounded w-8 text-center p-0.5" onchange="updateProp(${mIdx},'income','${item.id}','hours',this.value)"><span>h = ${tot.toFixed(0)}</span></div>`;
-                }
-                const isExp = type === 'fixed' || type === 'variable';
-                const bankLabel = item.source === 'B1' ? b1Name : b2Name;
-
-                return `
-                <div class="p-4 item-row ${isPaid ? 'item-paid' : 'item-unpaid'}">
-                    <div class="flex items-center justify-between gap-3 mb-4">
-                        <div class="flex flex-col flex-grow min-w-0">
-                             <input type="text" value="${item.name}" class="main-text bg-transparent border-none text-[0.85rem] font-black w-full focus:ring-0 truncate p-0 mb-1" onchange="updateProp(${mIdx},'${type}','${item.id}','name',this.value)" ${item.isSystem?'readonly':''}>
-                             <div class="flex items-center gap-2">
-                                <input type="date" value="${item.date||''}" class="bg-transparent border-none p-0 text-[10px] text-slate-500 font-bold" onchange="updateProp(${mIdx},'${type}','${item.id}','date',this.value)">
-                                ${isExp ? `<span class="bank-tag ${item.source==='B1'?'text-blue-400 border-blue-400/30':'text-emerald-400 border-emerald-400/30'}" onclick="toggleSource(${mIdx},'${type}','${item.id}')">${bankLabel}</span>` : ''}
-                             </div>
-                        </div>
-                        <div class="flex items-center gap-1"><span class="text-[10px] font-black text-slate-600">R$</span>${valHtml}</div>
+function AccountsView({ accounts, darkMode, onAddAccount, onUpdateAccount, onDeleteAccount, onExport, fileInputRef, onImport }) {
+  return (
+    <div className="space-y-6 animate-in slide-in-from-right-8 duration-500">
+      <div>
+         <h3 className="font-bold text-sm mb-3 flex items-center gap-2"><Landmark size={16} /> Contas Correntes</h3>
+         <div className={`rounded-3xl border overflow-hidden ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+            {accounts.map((acc, idx) => (
+              <div key={acc.id} className={`p-4 flex items-center justify-between ${idx !== accounts.length - 1 ? 'border-b border-zinc-800' : ''}`}>
+                 <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold ${acc.color}`}>
+                       <input value={acc.name.substring(0,2).toUpperCase()} readOnly className="bg-transparent w-full text-center outline-none cursor-default" />
                     </div>
-                    
-                    <!-- Linha Inferior com Lixeira e Switch -->
-                    <div class="flex justify-between items-center pt-2 border-t border-white/5">
-                        ${!item.isSystem ? `<div onclick="removeItem(${mIdx},'${type}','${item.id}')" class="p-2 bg-slate-800/50 rounded-lg text-slate-600 active:bg-red-900/20 active:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></div>` : '<div></div>'}
-                        ${item.isPaid!==undefined && !item.isSystem ? `<label class="toggle-switch"><input type="checkbox" ${isPaid?'checked':''} onchange="togglePaid(${mIdx},'${type}','${item.id}')"><span class="slider"></span></label>`: ''}
+                    <div>
+                      <input value={acc.name} onChange={(e) => onUpdateAccount(acc.id, 'name', e.target.value)} className="bg-transparent font-semibold text-sm outline-none w-32" />
+                      <p className="text-[10px] opacity-50">{acc.type}</p>
                     </div>
-                </div>`}).join('');
-            lucide.createIcons();
-        }
+                 </div>
+                 <div className="text-right flex flex-col items-end">
+                    <input type="number" value={acc.balance} onChange={(e) => onUpdateAccount(acc.id, 'balance', e.target.value)} className="bg-transparent font-bold text-right w-24 outline-none" />
+                    <button onClick={() => onDeleteAccount(acc.id)} className="text-[10px] text-red-500 mt-1">Excluir</button>
+                 </div>
+              </div>
+            ))}
+            <button onClick={onAddAccount} className={`w-full py-3 text-xs font-bold uppercase tracking-wider ${darkMode ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>
+              + Adicionar Nova Conta
+            </button>
+         </div>
+      </div>
 
-        // --- HANDLERS ---
-        function updateProp(mIdx,type,id,p,v) { const i = getL(mIdx,type).find(x=>x.id==id); if(i){ i[p]=(p==='hours'?parseFloat(v):v); saveData(); propagateBalances(); renderCurrentView(); } }
-        function updateValue(mIdx,type,id,v) { const i = getL(mIdx,type).find(x=>x.id==id); if(i){ i.value=parseFloat(v)||0; saveData(); propagateBalances(); renderCurrentView(); } }
-        function togglePaid(mIdx,type,id) { const i = getL(mIdx,type).find(x=>x.id==id); if(i){ i.isPaid=!i.isPaid; saveData(); renderCurrentView(); } }
-        function toggleSource(mIdx,type,id) { const i = getL(mIdx,type).find(x=>x.id==id); if(i){ i.source = i.source === 'B1' ? 'B2' : 'B1'; saveData(); renderCurrentView(); } }
-        function addItem(mIdx,type) { getL(mIdx,type).push({ id: Math.random(), name: 'Novo Item', value: 0, date: new Date().toISOString().slice(0,10), isPaid: false, source: 'B1' }); saveData(); propagateBalances(); renderCurrentView(); }
-        function removeItem(mIdx,type,id) { customConfirm("Remover lançamento?", "Isso apagará o item deste mês definitivamente.", () => { const k = type==='income'?'incomeEntries':(type==='fixed'?'fixedExpensesEntries':'variableExpensesEntries'); timeline[mIdx].data[k] = getL(mIdx,type).filter(x=>x.id!=id); saveData(); propagateBalances(); renderCurrentView(); }); }
-        function getL(mIdx,type) { const d = timeline[mIdx].data; return type==='income'?d.incomeEntries:(type==='fixed'?d.fixedExpensesEntries:d.variableExpensesEntries); }
-        
-        function propagateBalances() {
-            for (let i = 0; i < timeline.length - 1; i++) {
-                const d = timeline[i].data;
-                const inc = d.incomeEntries.reduce((s, x) => s + (x.isCalculated ? (x.hours * x.rate) : (x.value || 0)), 0);
-                const fixT = d.fixedExpensesEntries.reduce((s, x) => s + (x.value || 0), 0);
-                const varT = d.variableExpensesEntries.reduce((s, x) => s + (x.value || 0), 0);
-                let nextSys = timeline[i+1].data.incomeEntries.find(x => x.isSystem);
-                if(nextSys) nextSys.value = inc - (fixT + varT);
-            }
-        }
+      <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} mt-8`}>
+        <h3 className="font-bold mb-4 flex items-center gap-2"><Save size={18} /> Backup e Dados</h3>
+        <div className="space-y-3">
+          <button onClick={onExport} className="w-full btn-primary bg-blue-600 text-white p-3 rounded-xl flex justify-center gap-2 font-medium hover:bg-blue-700 transition-colors"><Download size={18} /> Exportar Backup</button>
+          <div className="relative">
+            <input type="file" ref={fileInputRef} onChange={onImport} className="hidden" accept=".json" />
+            <button onClick={() => fileInputRef.current.click()} className={`w-full border p-3 rounded-xl flex justify-center gap-2 transition-colors ${darkMode ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-50'}`}><Upload size={18} /> Importar Backup</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        function applyGlobalItem() {
-            const n = document.getElementById('global-name').value;
-            const v = parseFloat(document.getElementById('global-value').value) || 0;
-            const t = document.getElementById('global-type').value;
-            const d = document.getElementById('global-date').value;
-            if(!n || !d) return;
-            const day = new Date(d + 'T00:00:00').getDate();
-            timeline.forEach(m => {
-                const list = t==='income'?m.data.incomeEntries:(t==='fixed'?m.data.fixedExpensesEntries:m.data.variableExpensesEntries);
-                let targetDate = new Date(m.year, MONTH_NAMES.indexOf(m.label), day);
-                if (targetDate.getMonth() !== MONTH_NAMES.indexOf(m.label)) targetDate.setDate(0); 
-                list.push({ id: Math.random(), name: n, value: v, date: targetDate.toISOString().slice(0, 10), isPaid: false, source: 'B1' });
-            });
-            saveData(); propagateBalances(); renderCurrentView(); closeModal('global-tool-modal');
-        }
-
-        function advanceTimeline() { 
-            customConfirm("Encerrar o mês?", "O mês mais antigo será excluído para dar espaço ao novo.", () => { 
-                timeline.shift(); 
-                if(timeline.length < 1) createInitialTimeline(); 
-                else { 
-                    const last = timeline[timeline.length - 1]; 
-                    let nIdx = (MONTH_NAMES.indexOf(last.label) + 1) % 12; 
-                    let nYear = nIdx === 0 ? last.year + 1 : last.year; 
-                    timeline.push({ label: MONTH_NAMES[nIdx], year: nYear, bank1Name: last.bank1Name, bank2Name: last.bank2Name, bank1Balance: 0, bank2Balance: 0, data: createEmptyMonthData(nIdx, nYear) }); 
-                } 
-                saveData(); location.reload(); 
-            }); 
-        }
-        
-        function initOverviewChart() {
-            const ctx = document.getElementById('overviewChart');
-            if(!ctx) return;
-            const labels = timeline.map(m => m.label);
-            const incs = timeline.map(m => m.data.incomeEntries.reduce((s, x) => s + (x.isCalculated ? (x.hours * x.rate) : (x.value || 0)), 0));
-            const exps = timeline.map(m => m.data.fixedExpensesEntries.reduce((s, x) => s + (x.value || 0), 0) + m.data.variableExpensesEntries.reduce((s, x) => s + (x.value || 0), 0));
-            if(globalChart) globalChart.destroy();
-            globalChart = new Chart(ctx.getContext('2d'), {
-                type: 'line',
-                data: { labels, datasets: [
-                    { data: incs, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.4, borderWidth: 4, pointRadius: 0 },
-                    { data: exps, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.4, borderWidth: 4, pointRadius: 0 }
-                ]},
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 9, weight: 'bold' } } } } }
-            });
-        }
-
-        function showCashFlow(idx) {
-            const m = timeline[idx]; const entries = [...m.data.incomeEntries.map(i => ({ ...i, val: i.isCalculated?i.hours*i.rate:i.value, type:'IN' })), ...m.data.fixedExpensesEntries.map(i => ({ ...i, val: -i.value, type:'OUT' })), ...m.data.variableExpensesEntries.map(i => ({ ...i, val: -i.value, type:'OUT' }))].sort((a,b) => { const dA = new Date(a.date || '9999-12-31'); const dB = new Date(b.date || '9999-12-31'); if (dA - dB !== 0) return dA - dB; return a.type === 'IN' ? -1 : 1; });
-            let run = 0; document.getElementById('cashflow-content').innerHTML = `<table class="w-full text-left"><thead class="sticky top-0 bg-slate-800 text-[10px] uppercase text-slate-500"><tr><th class="p-3">Data</th><th>Descr.</th><th class="text-right">Valor</th></tr></thead><tbody>${entries.map(e=>{ run+=e.val; return `<tr class="border-b border-slate-700/50 text-[11px]"><td class="p-3 text-slate-500 font-mono">${e.date?new Date(e.date+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td><td class="font-bold text-slate-300">${e.name}</td><td class="text-right font-bold ${e.type==='IN'?'text-green-400':'text-red-400'}">${formatBRL(e.val)}</td></tr>`}).join('')}</tbody></table>`;
-            document.getElementById('cashflow-title').innerText = `Fluxo: ${m.label}`; openModal('cashflow-modal-overlay');
-        }
-
-        function openModal(id) { document.getElementById(id).style.display='flex'; lucide.createIcons(); }
-        function closeModal(id) { document.getElementById(id).style.display='none'; }
-        function formatBRL(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
-        function customConfirm(t, b, cb) { document.getElementById('confirm-title').innerText = t; document.getElementById('confirm-body').innerText = b; const btn = document.getElementById('confirm-btn-yes'); btn.onclick = () => { closeModal('confirm-modal-overlay'); cb(); }; openModal('confirm-modal-overlay'); }
-        function editAppTitle() { const n = prompt("Novo nome da planilha:", "Finanças Pro"); if(n){ document.getElementById('app-display-title').innerText = n; localStorage.setItem(TITLE_KEY, n); saveData(); } }
-        function downloadBackup() { const b = new Blob([JSON.stringify(timeline)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `backup_financas.json`; a.click(); }
-        function handleImport(input) { const r = new FileReader(); r.onload = e => { timeline = JSON.parse(e.target.result); migrateToV39(); location.reload(); }; r.readAsText(input.files[0]); }
-
-        document.addEventListener('DOMContentLoaded', initApp);
-    </script>
-</body>
-</html>
+function NavItem({ icon, label, isActive, onClick }) {
+  return (
+    <button onClick={onClick} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-all duration-300 ${isActive ? 'text-blue-500' : 'text-zinc-400 opacity-60 hover:opacity-100'}`}>
+      <div className={`transition-transform duration-300 ${isActive ? '-translate-y-1' : ''}`}>{icon}</div>
+      {isActive && <span className="text-[10px] font-bold animate-in fade-in slide-in-from-bottom-2">{label}</span>}
+    </button>
+  );
+}
