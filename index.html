@@ -1,595 +1,657 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { 
-  Plus, Trash2, TrendingUp, TrendingDown, Wallet, 
-  Moon, Sun, Save, Download, Upload, Copy, 
-  CheckCircle2, Circle, LayoutDashboard, List, PieChart, 
-  Home, ShoppingCart, Car, Heart, Coffee, AlertCircle, 
-  CalendarDays, Building2, CreditCard, Target, ArrowRight,
-  MoreHorizontal, Landmark, Pencil, X, DollarSign, Repeat,
-  Filter, Search, AlertTriangle
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finanças Pro Ultimate V7</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel para traduzir JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Prop Types (Dependência comum de libs React UMD) -->
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
 
-// --- CONFIGURAÇÃO E UTILITÁRIOS ---
-const STORAGE_KEY = 'financas_pro_ultimate_v7_budget_fix';
-const MONTH_NAMES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+    <!-- Lucide Icons (React Version - UMD Build Estável) -->
+    <script src="https://unpkg.com/lucide-react@0.263.1/dist/lucide-react.umd.min.js"></script>
 
-const CATEGORIES = {
-  'Moradia': { color: '#3b82f6', icon: <Home size={16} />, bg: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' },
-  'Alimentação': { color: '#f59e0b', icon: <ShoppingCart size={16} />, bg: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' },
-  'Transporte': { color: '#10b981', icon: <Car size={16} />, bg: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
-  'Saúde': { color: '#ef4444', icon: <Heart size={16} />, bg: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
-  'Lazer': { color: '#8b5cf6', icon: <Coffee size={16} />, bg: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' },
-  'Educação': { color: '#ec4899', icon: <Building2 size={16} />, bg: 'bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400' },
-  'Outros': { color: '#71717a', icon: <AlertCircle size={16} />, bg: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400' }
-};
+    <style>
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.5); border-radius: 20px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body class="bg-zinc-950 text-white">
+    <div id="root"></div>
 
-const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-const generateId = () => Math.random().toString(36).substr(2, 9);
-
-// --- COMPONENTE PRINCIPAL ---
-export default function App() {
-  const [data, setData] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : generateInitialData();
-    } catch (e) {
-      return generateInitialData();
-    }
-  });
-
-  const [currentTab, setCurrentTab] = useState('dashboard'); 
-  const [darkMode, setDarkMode] = useState(true);
-  const [selectedMonthIndex, setSelectedMonthIndex] = useState(0); 
-  const fileInputRef = useRef(null);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
-
-  function generateInitialData() {
-    const today = new Date();
-    const months = [];
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-      months.push({
-        id: generateId(),
-        label: MONTH_NAMES[d.getMonth()],
-        year: d.getFullYear(),
-        monthIndex: d.getMonth(),
-        transactions: [] 
-      });
-    }
-
-    return {
-      months,
-      accounts: [
-        { id: 'acc_1', name: 'Nubank', type: 'Conta Corrente', balance: 1250.00, color: 'bg-purple-600' },
-        { id: 'acc_2', name: 'Inter', type: 'Conta Corrente', balance: 3400.50, color: 'bg-orange-500' }
-      ],
-      creditCards: [
-        { id: 'card_1', name: 'Nubank Card', limit: 8000, closingDay: 10, dueDay: 17, color: 'bg-purple-600' }
-      ],
-      budgets: {
-        'Alimentação': 1800,
-        'Lazer': 600,
-        'Transporte': 800
-      },
-      goals: [
-        { id: 'goal_1', name: 'Carro Novo', target: 60000, current: 19200 }
-      ]
-    };
-  }
-
-  // --- CRUD HELPERS ---
-  const updateTransactionsState = (newTransactions) => {
-    const updatedMonths = [...data.months];
-    updatedMonths[selectedMonthIndex] = {
-      ...updatedMonths[selectedMonthIndex],
-      transactions: newTransactions
-    };
-    setData({ ...data, months: updatedMonths });
-  };
-
-  const addTransaction = (type, isFixed = false) => {
-    const newTrans = {
-      id: generateId(),
-      description: 'Novo Item',
-      value: 0,
-      type: type,
-      isFixed: isFixed,
-      category: 'Outros',
-      date: new Date().toISOString().split('T')[0],
-      status: 'pending',
-      accountId: data.accounts[0]?.id || 'cash'
-    };
-    updateTransactionsState([...data.months[selectedMonthIndex].transactions, newTrans]);
-  };
-
-  const updateTransaction = (id, field, value) => {
-    const currentTrans = data.months[selectedMonthIndex].transactions;
-    const newTransList = currentTrans.map(t => t.id === id ? { ...t, [field]: value } : t);
-    updateTransactionsState(newTransList);
-  };
-
-  const deleteTransaction = (id) => {
-    if(!window.confirm("Deseja realmente excluir este lançamento?")) return;
-    const currentTrans = data.months[selectedMonthIndex].transactions;
-    const newTransList = currentTrans.filter(t => t.id !== id);
-    updateTransactionsState(newTransList);
-  };
-
-  // Helpers para Contas, Metas e Orçamentos
-  const addAccount = () => setData({ ...data, accounts: [...data.accounts, { id: generateId(), name: 'Nova Conta', type: 'Conta Corrente', balance: 0, color: 'bg-gray-600' }] });
-  const updateAccount = (id, f, v) => setData({ ...data, accounts: data.accounts.map(a => a.id === id ? { ...a, [f]: v } : a) });
-  const deleteAccount = (id) => window.confirm("Excluir conta?") && setData({ ...data, accounts: data.accounts.filter(a => a.id !== id) });
-
-  const addGoal = () => setData({ ...data, goals: [...data.goals, { id: generateId(), name: 'Nova Meta', target: 1000, current: 0 }] });
-  const updateGoal = (id, f, v) => setData({ ...data, goals: data.goals.map(g => g.id === id ? { ...g, [f]: v } : g) });
-  const deleteGoal = (id) => window.confirm("Excluir meta?") && setData({ ...data, goals: data.goals.filter(g => g.id !== id) });
-  
-  // -- Gerenciamento de Orçamentos (Budgets) --
-  const updateBudget = (cat, v) => {
-    setData({ ...data, budgets: { ...data.budgets, [cat]: parseFloat(v) || 0 } });
-  };
-  
-  const addBudget = () => {
-    // Simples prompt para adicionar nova categoria. Em um app real seria um modal.
-    const cat = window.prompt("Nome da Categoria (ex: Saúde, Educação):");
-    if (cat && !data.budgets[cat]) {
-      setData({ ...data, budgets: { ...data.budgets, [cat]: 0 } });
-    } else if (data.budgets[cat]) {
-      alert("Esta categoria já possui um orçamento definido.");
-    }
-  };
-
-  const deleteBudget = (cat) => {
-    if (!window.confirm(`Remover o orçamento de ${cat}?`)) return;
-    const newBudgets = { ...data.budgets };
-    delete newBudgets[cat];
-    setData({ ...data, budgets: newBudgets });
-  };
-
-  // --- CÁLCULOS FINANCEIROS ---
-  const currentMonth = data.months[selectedMonthIndex];
-  const financials = useMemo(() => {
-    const trans = currentMonth.transactions;
-    const income = trans.filter(t => t.type === 'income').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
-    const expense = trans.filter(t => t.type === 'expense').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
-    const accountsTotal = data.accounts.reduce((acc, a) => acc + (parseFloat(a.balance) || 0), 0);
-    const pendingIncome = trans.filter(t => t.type === 'income' && t.status === 'pending').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
-    const pendingExpense = trans.filter(t => t.type === 'expense' && t.status === 'pending').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
-    const projected = accountsTotal + pendingIncome - pendingExpense;
-    return { income, expense, balance: accountsTotal, projected };
-  }, [currentMonth, data.accounts]);
-
-  // Backup
-  const handleExport = () => {
-    const a = document.createElement('a');
-    a.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
-    a.download = "backup_financas.json";
-    a.click();
-  };
-  const handleImport = (e) => {
-    const fr = new FileReader();
-    fr.onload = ev => { try { setData(JSON.parse(ev.target.result)); alert("Sucesso!"); } catch { alert("Erro."); } };
-    fr.readAsText(e.target.files[0]);
-  };
-
-  return (
-    <div className={`flex flex-col h-screen font-sans transition-colors duration-300 ${darkMode ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'}`}>
-      
-      {/* HEADER */}
-      <header className={`px-4 py-3 flex justify-between items-center border-b ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
-            <TrendingUp size={18} />
-          </div>
-          <div>
-            <h1 className="font-bold text-lg leading-none">Finanças<span className="text-blue-500">Pro</span></h1>
-            <span className="text-[10px] opacity-60 font-medium tracking-wider">ULTIMATE V7</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-           <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full transition-colors ${darkMode ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
-             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-           </button>
-        </div>
-      </header>
-
-      {/* NAVEGAÇÃO DE MESES */}
-      <div className={`flex items-center gap-1 overflow-x-auto no-scrollbar py-2 px-2 border-b ${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-slate-200'}`}>
-        {data.months.map((m, idx) => (
-          <button key={m.id} onClick={() => setSelectedMonthIndex(idx)}
-            className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${selectedMonthIndex === idx ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:bg-zinc-800'}`}>
-            {m.label} <span className="opacity-60 font-normal ml-1">{m.year}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* CONTEÚDO PRINCIPAL */}
-      <main className="flex-1 overflow-y-auto custom-scrollbar pb-24 p-4 space-y-6">
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
         
-        {currentTab === 'dashboard' && (
-          <DashboardView financials={financials} darkMode={darkMode} data={data} selectedMonthIndex={selectedMonthIndex} categories={CATEGORIES} />
-        )}
+        // CORREÇÃO: Captura segura da biblioteca global Lucide
+        // Alguns ambientes expõem como 'lucideReact', outros como 'lucide'
+        const lucideLib = window.lucideReact || window.lucide || {};
 
-        {currentTab === 'transactions' && (
-          <TransactionsView 
-            transactions={currentMonth.transactions}
-            darkMode={darkMode}
-            onAdd={addTransaction}
-            onUpdate={updateTransaction}
-            onDelete={deleteTransaction}
-          />
-        )}
+        const { 
+            Plus, Trash2, TrendingUp, TrendingDown, Wallet, 
+            Moon, Sun, Save, Download, Upload, Copy, 
+            CheckCircle2, Circle, LayoutDashboard, List, PieChart, 
+            Home, ShoppingCart, Car, Heart, Coffee, AlertCircle, 
+            CalendarDays, Building2, CreditCard, Target, ArrowRight,
+            MoreHorizontal, Landmark, Pencil, X, DollarSign, Repeat,
+            Filter, Search, AlertTriangle
+        } = lucideLib;
 
-        {currentTab === 'planning' && (
-          <PlanningView 
-            budgets={data.budgets} goals={data.goals} 
-            transactions={currentMonth.transactions} 
-            darkMode={darkMode}
-            onAddGoal={addGoal} onUpdateGoal={updateGoal} onDeleteGoal={deleteGoal} 
-            onUpdateBudget={updateBudget} onAddBudget={addBudget} onDeleteBudget={deleteBudget}
-          />
-        )}
+        // --- CONFIGURAÇÃO E UTILITÁRIOS ---
+        const STORAGE_KEY = 'financas_pro_ultimate_v7_html_fix';
+        const MONTH_NAMES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-        {currentTab === 'accounts' && (
-          <AccountsView 
-            accounts={data.accounts} cards={data.creditCards} darkMode={darkMode}
-            onAddAccount={addAccount} onUpdateAccount={updateAccount} onDeleteAccount={deleteAccount}
-            onExport={handleExport} fileInputRef={fileInputRef} onImport={handleImport}
-          />
-        )}
-      </main>
+        // Fallback simples para ícones caso falhem
+        const SafeIcon = ({ icon, size = 16, className = "" }) => {
+            if (React.isValidElement(icon)) return React.cloneElement(icon, { size, className });
+            if (!icon) return <span className="text-xs">?</span>;
+            const IconComponent = icon;
+            return <IconComponent size={size} className={className} />;
+        };
 
-      {/* BOTTOM NAV */}
-      <nav className={`fixed bottom-0 left-0 w-full border-t z-50 pb-safe ${darkMode ? 'bg-zinc-900/95 border-zinc-800 backdrop-blur-md' : 'bg-white/95 border-slate-200'}`}>
-        <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
-          <NavItem icon={<LayoutDashboard size={20} />} label="Visão Geral" isActive={currentTab === 'dashboard'} onClick={() => setCurrentTab('dashboard')} />
-          <NavItem icon={<List size={20} />} label="Extrato" isActive={currentTab === 'transactions'} onClick={() => setCurrentTab('transactions')} />
-          <NavItem icon={<Target size={20} />} label="Planejamento" isActive={currentTab === 'planning'} onClick={() => setCurrentTab('planning')} />
-          <NavItem icon={<Wallet size={20} />} label="Carteira" isActive={currentTab === 'accounts'} onClick={() => setCurrentTab('accounts')} />
-        </div>
-      </nav>
-    </div>
-  );
-}
+        const CATEGORIES = {
+            'Moradia': { color: '#3b82f6', icon: Home, bg: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' },
+            'Alimentação': { color: '#f59e0b', icon: ShoppingCart, bg: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' },
+            'Transporte': { color: '#10b981', icon: Car, bg: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
+            'Saúde': { color: '#ef4444', icon: Heart, bg: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
+            'Lazer': { color: '#8b5cf6', icon: Coffee, bg: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' },
+            'Educação': { color: '#ec4899', icon: Building2, bg: 'bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400' },
+            'Outros': { color: '#71717a', icon: AlertCircle, bg: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400' }
+        };
 
-// --- SUB-VIEWS ---
+        const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+        const generateId = () => Math.random().toString(36).substr(2, 9);
 
-function TransactionsView({ transactions, darkMode, onAdd, onUpdate, onDelete }) {
-  const [activeSubTab, setActiveSubTab] = useState('all'); 
+        // --- COMPONENTE PRINCIPAL ---
+        function App() {
+            const [data, setData] = useState(() => {
+                try {
+                    const saved = localStorage.getItem(STORAGE_KEY);
+                    return saved ? JSON.parse(saved) : generateInitialData();
+                } catch (e) {
+                    return generateInitialData();
+                }
+            });
 
-  const filteredTransactions = transactions.filter(t => {
-    if (activeSubTab === 'fixed') return t.isFixed && t.type === 'expense';
-    if (activeSubTab === 'variable') return !t.isFixed && t.type === 'expense';
-    return true; 
-  }).sort((a,b) => new Date(b.date) - new Date(a.date));
+            const [currentTab, setCurrentTab] = useState('dashboard'); 
+            const [darkMode, setDarkMode] = useState(true);
+            const [selectedMonthIndex, setSelectedMonthIndex] = useState(0); 
+            const fileInputRef = useRef(null);
 
-  const totalFiltered = filteredTransactions.reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+            useEffect(() => {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                // Atualiza classe no body
+                if (darkMode) {
+                    document.body.classList.add('bg-zinc-950', 'text-zinc-100');
+                    document.body.classList.remove('bg-slate-50', 'text-slate-800');
+                } else {
+                    document.body.classList.add('bg-slate-50', 'text-slate-800');
+                    document.body.classList.remove('bg-zinc-950', 'text-zinc-100');
+                }
+            }, [data, darkMode]);
 
-  return (
-    <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-      
-      <div className={`p-1 rounded-xl flex ${darkMode ? 'bg-zinc-900' : 'bg-slate-100'}`}>
-        <button onClick={() => setActiveSubTab('all')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'all' ? (darkMode ? 'bg-zinc-800 text-white shadow' : 'bg-white text-slate-800 shadow') : 'text-zinc-500'}`}>Cronologia</button>
-        <button onClick={() => setActiveSubTab('fixed')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'fixed' ? (darkMode ? 'bg-zinc-800 text-white shadow' : 'bg-white text-slate-800 shadow') : 'text-zinc-500'}`}>Fixas</button>
-        <button onClick={() => setActiveSubTab('variable')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'variable' ? (darkMode ? 'bg-zinc-800 text-white shadow' : 'bg-white text-slate-800 shadow') : 'text-zinc-500'}`}>Variáveis</button>
-      </div>
+            function generateInitialData() {
+                const today = new Date();
+                const months = [];
+                for (let i = 0; i < 6; i++) {
+                    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+                    months.push({
+                        id: generateId(),
+                        label: MONTH_NAMES[d.getMonth()],
+                        year: d.getFullYear(),
+                        monthIndex: d.getMonth(),
+                        transactions: [] 
+                    });
+                }
 
-      {activeSubTab !== 'all' && (
-        <div className={`p-4 rounded-2xl flex justify-between items-center ${darkMode ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-slate-200'}`}>
-           <div className="flex items-center gap-2">
-             <div className={`p-2 rounded-lg ${activeSubTab === 'fixed' ? 'bg-blue-500/10 text-blue-500' : 'bg-orange-500/10 text-orange-500'}`}>
-               {activeSubTab === 'fixed' ? <Repeat size={18} /> : <ShoppingCart size={18} />}
-             </div>
-             <div>
-               <h3 className="font-bold text-sm">{activeSubTab === 'fixed' ? 'Despesas Fixas' : 'Despesas Variáveis'}</h3>
-               <p className="text-[10px] opacity-60">{filteredTransactions.length} itens</p>
-             </div>
-           </div>
-           <p className="text-xl font-bold">{formatCurrency(totalFiltered)}</p>
-        </div>
-      )}
+                return {
+                    months,
+                    accounts: [
+                        { id: 'acc_1', name: 'Nubank', type: 'Conta Corrente', balance: 1250.00, color: 'bg-purple-600' },
+                        { id: 'acc_2', name: 'Inter', type: 'Conta Corrente', balance: 3400.50, color: 'bg-orange-500' }
+                    ],
+                    creditCards: [
+                        { id: 'card_1', name: 'Nubank Card', limit: 8000, closingDay: 10, dueDay: 17, color: 'bg-purple-600' }
+                    ],
+                    budgets: {
+                        'Alimentação': 1800,
+                        'Lazer': 600,
+                        'Transporte': 800
+                    },
+                    goals: [
+                        { id: 'goal_1', name: 'Carro Novo', target: 60000, current: 19200 }
+                    ]
+                };
+            }
 
-      <div className={`rounded-2xl overflow-hidden border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
-        {filteredTransactions.length === 0 && (
-          <div className="p-8 text-center opacity-50 text-sm">Nenhum lançamento encontrado.</div>
-        )}
-        {filteredTransactions.map((t, idx) => (
-          <div key={t.id} className={`p-4 flex items-center justify-between gap-3 group ${idx !== filteredTransactions.length - 1 ? (darkMode ? 'border-b border-zinc-800' : 'border-b border-slate-100') : ''}`}>
-             
-             <div className="flex items-center gap-3 flex-1 min-w-0">
-               <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${CATEGORIES[t.category]?.bg || (darkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-slate-100 text-slate-500')}`}>
-                 {CATEGORIES[t.category]?.icon || <Circle size={16} />}
-               </div>
-               
-               <div className="flex flex-col flex-1 min-w-0">
-                 <input 
-                   value={t.description} 
-                   onChange={(e) => onUpdate(t.id, 'description', e.target.value)}
-                   className={`bg-transparent outline-none font-semibold text-sm w-full truncate ${darkMode ? 'text-zinc-200 placeholder-zinc-600' : 'text-slate-800 placeholder-slate-400'}`}
-                   placeholder="Descrição"
-                 />
-                 <div className="flex items-center gap-2 mt-0.5">
-                   <div className="flex items-center gap-1 text-[10px] opacity-60">
-                     <CalendarDays size={10} />
-                     <input type="date" value={t.date} onChange={(e) => onUpdate(t.id, 'date', e.target.value)} className="bg-transparent outline-none" />
-                   </div>
-                   <span className="text-[10px] opacity-40">•</span>
-                   <select 
-                      value={t.category} 
-                      onChange={(e) => onUpdate(t.id, 'category', e.target.value)}
-                      className={`bg-transparent text-[10px] outline-none font-medium ${darkMode ? 'text-zinc-400' : 'text-slate-500'}`}
-                   >
-                     {Object.keys(CATEGORIES).map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                   </select>
-                 </div>
-               </div>
-             </div>
+            // --- CRUD HELPERS ---
+            const updateTransactionsState = (newTransactions) => {
+                const updatedMonths = [...data.months];
+                updatedMonths[selectedMonthIndex] = {
+                    ...updatedMonths[selectedMonthIndex],
+                    transactions: newTransactions
+                };
+                setData({ ...data, months: updatedMonths });
+            };
 
-             <div className="text-right flex flex-col items-end gap-1">
-               <input 
-                 type="number" 
-                 value={t.value} 
-                 onChange={(e) => onUpdate(t.id, 'value', e.target.value)}
-                 className={`bg-transparent outline-none font-bold text-sm text-right w-24 ${t.type === 'income' ? 'text-emerald-500' : (darkMode ? 'text-zinc-200' : 'text-slate-800')}`}
-               />
-               
-               <div className="flex items-center gap-2">
-                 <button onClick={() => onDelete(t.id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1">
-                   <Trash2 size={12} />
-                 </button>
-                 
-                 <button onClick={() => onUpdate(t.id, 'status', t.status === 'paid' ? 'pending' : 'paid')} 
-                   className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${t.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' : (darkMode ? 'bg-zinc-800 text-zinc-500' : 'bg-slate-100 text-slate-400')}`}>
-                   {t.status === 'paid' ? 'Pago' : 'Pendente'}
-                 </button>
-               </div>
-             </div>
+            const addTransaction = (type, isFixed = false) => {
+                const newTrans = {
+                    id: generateId(),
+                    description: 'Novo Item',
+                    value: 0,
+                    type: type,
+                    isFixed: isFixed,
+                    category: 'Outros',
+                    date: new Date().toISOString().split('T')[0],
+                    status: 'pending',
+                    accountId: data.accounts[0]?.id || 'cash'
+                };
+                updateTransactionsState([...data.months[selectedMonthIndex].transactions, newTrans]);
+            };
 
-          </div>
-        ))}
-      </div>
+            const updateTransaction = (id, field, value) => {
+                const currentTrans = data.months[selectedMonthIndex].transactions;
+                const newTransList = currentTrans.map(t => t.id === id ? { ...t, [field]: value } : t);
+                updateTransactionsState(newTransList);
+            };
 
-      <div className="fixed bottom-20 right-4 flex flex-col gap-3 z-40">
-        {activeSubTab === 'all' ? (
-          <>
-            <button onClick={() => onAdd('income')} className="shadow-lg shadow-emerald-500/30 w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform"><TrendingUp size={20} /></button>
-            <button onClick={() => onAdd('expense')} className="shadow-lg shadow-red-500/30 w-14 h-14 rounded-full bg-red-500 text-white flex items-center justify-center hover:scale-105 transition-transform"><Plus size={24} /></button>
-          </>
-        ) : (
-          <button onClick={() => onAdd('expense', activeSubTab === 'fixed')} className={`shadow-lg w-14 h-14 rounded-full text-white flex items-center justify-center hover:scale-105 transition-transform ${activeSubTab === 'fixed' ? 'bg-blue-600 shadow-blue-500/30' : 'bg-orange-500 shadow-orange-500/30'}`}>
-            <Plus size={24} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+            const deleteTransaction = (id) => {
+                if(!window.confirm("Deseja realmente excluir este lançamento?")) return;
+                const currentTrans = data.months[selectedMonthIndex].transactions;
+                const newTransList = currentTrans.filter(t => t.id !== id);
+                updateTransactionsState(newTransList);
+            };
 
-function DashboardView({ financials, darkMode, data, selectedMonthIndex, categories }) {
-  const expenses = data.months[selectedMonthIndex].transactions.filter(t => t.type === 'expense');
-  const catTotals = {};
-  expenses.forEach(t => { const cat = t.category || 'Outros'; catTotals[cat] = (catTotals[cat] || 0) + (parseFloat(t.value) || 0); });
-  const sortedCats = Object.entries(catTotals).sort((a,b) => b[1] - a[1]).slice(0, 4);
-  const maxCatVal = sortedCats[0]?.[1] || 1;
+            // Helpers para Contas, Metas e Orçamentos
+            const addAccount = () => setData({ ...data, accounts: [...data.accounts, { id: generateId(), name: 'Nova Conta', type: 'Conta Corrente', balance: 0, color: 'bg-gray-600' }] });
+            const updateAccount = (id, f, v) => setData({ ...data, accounts: data.accounts.map(a => a.id === id ? { ...a, [f]: v } : a) });
+            const deleteAccount = (id) => window.confirm("Excluir conta?") && setData({ ...data, accounts: data.accounts.filter(a => a.id !== id) });
 
-  return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="relative rounded-3xl overflow-hidden bg-blue-600 text-white shadow-xl shadow-blue-900/20 p-6">
-        <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="relative z-10">
-          <p className="text-blue-200 text-xs font-medium uppercase tracking-wider mb-1">Saldo Consolidado</p>
-          <h2 className="text-3xl font-bold tracking-tight mb-4">{formatCurrency(financials.balance)}</h2>
-          <div className="flex justify-between text-blue-100 text-xs mt-2 pt-4 border-t border-white/20">
-            <span>Projeção Final de Mês</span>
-            <span className="font-bold text-white">{formatCurrency(financials.projected)}</span>
-          </div>
-        </div>
-      </div>
+            const addGoal = () => setData({ ...data, goals: [...data.goals, { id: generateId(), name: 'Nova Meta', target: 1000, current: 0 }] });
+            const updateGoal = (id, f, v) => setData({ ...data, goals: data.goals.map(g => g.id === id ? { ...g, [f]: v } : g) });
+            const deleteGoal = (id) => window.confirm("Excluir meta?") && setData({ ...data, goals: data.goals.filter(g => g.id !== id) });
+            
+            // -- Gerenciamento de Orçamentos (Budgets) --
+            const updateBudget = (cat, v) => {
+                setData({ ...data, budgets: { ...data.budgets, [cat]: parseFloat(v) || 0 } });
+            };
+            
+            const addBudget = () => {
+                const cat = window.prompt("Nome da Categoria (ex: Saúde, Educação):");
+                if (cat && !data.budgets[cat]) {
+                    setData({ ...data, budgets: { ...data.budgets, [cat]: 0 } });
+                } else if (data.budgets[cat]) {
+                    alert("Esta categoria já possui um orçamento definido.");
+                }
+            };
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className={`p-5 rounded-3xl text-white bg-emerald-500 shadow-lg shadow-emerald-500/20 relative overflow-hidden`}>
-          <div className="relative z-10"><div className="flex items-center gap-2 mb-2 opacity-90"><div className="p-1.5 bg-white/20 rounded-lg"><TrendingUp size={16} /></div><span className="text-xs font-bold uppercase tracking-wider">Receitas</span></div><h3 className="text-xl font-bold">{formatCurrency(financials.income)}</h3></div>
-        </div>
-        <div className={`p-5 rounded-3xl text-white bg-red-500 shadow-lg shadow-red-500/20 relative overflow-hidden`}>
-          <div className="relative z-10"><div className="flex items-center gap-2 mb-2 opacity-90"><div className="p-1.5 bg-white/20 rounded-lg"><TrendingDown size={16} /></div><span className="text-xs font-bold uppercase tracking-wider">Despesas</span></div><h3 className="text-xl font-bold">{formatCurrency(financials.expense)}</h3></div>
-        </div>
-      </div>
+            const deleteBudget = (cat) => {
+                if (!window.confirm(`Remover o orçamento de ${cat}?`)) return;
+                const newBudgets = { ...data.budgets };
+                delete newBudgets[cat];
+                setData({ ...data, budgets: newBudgets });
+            };
 
-      <div className={`p-5 rounded-3xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
-        <h3 className="font-bold text-sm mb-4">Top Despesas</h3>
-        <div className="space-y-4">
-          {sortedCats.length > 0 ? sortedCats.map(([cat, val]) => (
-            <div key={cat}>
-              <div className="flex justify-between text-xs mb-1">
-                <span className={darkMode ? 'text-zinc-300' : 'text-slate-700'}>{cat}</span>
-                <span className="font-bold opacity-70">{formatCurrency(val)}</span>
-              </div>
-              <div className={`h-2 w-full rounded-full overflow-hidden ${darkMode ? 'bg-zinc-800' : 'bg-slate-100'}`}>
-                <div className="h-full rounded-full" style={{ width: `${(val / maxCatVal) * 100}%`, backgroundColor: categories[cat]?.color || '#888' }}></div>
-              </div>
-            </div>
-          )) : <p className="text-xs text-center opacity-50">Sem despesas registradas.</p>}
-        </div>
-      </div>
-    </div>
-  );
-}
+            // --- CÁLCULOS FINANCEIROS ---
+            const currentMonth = data.months[selectedMonthIndex];
+            const financials = useMemo(() => {
+                const trans = currentMonth.transactions;
+                const income = trans.filter(t => t.type === 'income').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+                const expense = trans.filter(t => t.type === 'expense').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+                const accountsTotal = data.accounts.reduce((acc, a) => acc + (parseFloat(a.balance) || 0), 0);
+                const pendingIncome = trans.filter(t => t.type === 'income' && t.status === 'pending').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+                const pendingExpense = trans.filter(t => t.type === 'expense' && t.status === 'pending').reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+                const projected = accountsTotal + pendingIncome - pendingExpense;
+                return { income, expense, balance: accountsTotal, projected };
+            }, [currentMonth, data.accounts]);
 
-function PlanningView({ budgets, goals, transactions, darkMode, onAddGoal, onUpdateGoal, onDeleteGoal, onUpdateBudget, onAddBudget, onDeleteBudget }) {
-  // Cálculo de Gastos por Categoria
-  const spendingByCat = useMemo(() => {
-    const totals = {};
-    transactions.filter(t => t.type === 'expense').forEach(t => {
-       const cat = t.category || 'Outros';
-       totals[cat] = (totals[cat] || 0) + (parseFloat(t.value) || 0);
-    });
-    return totals;
-  }, [transactions]);
-
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="font-bold text-sm flex items-center gap-2"><Target size={16} /> Meus Objetivos</h3>
-          <button onClick={onAddGoal} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded">+ Novo</button>
-        </div>
-        <div className="space-y-3">
-          {goals.map(goal => {
-            const percent = Math.min(100, (goal.current / goal.target) * 100).toFixed(0);
-            return (
-              <div key={goal.id} className={`p-5 rounded-3xl border relative ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
-                <div className="flex justify-between mb-4">
-                  <input value={goal.name} onChange={(e) => onUpdateGoal(goal.id, 'name', e.target.value)} className="bg-transparent font-bold text-lg outline-none w-full" />
-                  <button onClick={() => onDeleteGoal(goal.id)} className="text-red-500"><Trash2 size={14} /></button>
-                </div>
-                <div className="flex justify-between items-end">
-                   <div>
-                     <p className="text-[10px] opacity-60">Atual</p>
-                     <div className="flex items-center gap-1">
-                       <span className="text-xs">R$</span>
-                       <input type="number" value={goal.current} onChange={(e) => onUpdateGoal(goal.id, 'current', e.target.value)} className="bg-transparent font-bold text-xl text-blue-500 outline-none w-24" />
-                     </div>
-                   </div>
-                   <div className="text-right">
-                     <p className="text-[10px] opacity-60">Meta</p>
-                     <input type="number" value={goal.target} onChange={(e) => onUpdateGoal(goal.id, 'target', e.target.value)} className="bg-transparent font-bold text-sm text-right outline-none w-20" />
-                   </div>
-                </div>
-                <div className="h-2 w-full rounded-full bg-zinc-800 mt-3 overflow-hidden">
-                   <div className="h-full bg-blue-500 transition-all" style={{ width: `${percent}%` }}></div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      <div>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="font-bold text-sm flex items-center gap-2"><PieChart size={16} /> Tetos de Gastos</h3>
-          <button onClick={onAddBudget} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded">+ Novo</button>
-        </div>
-        <div className="space-y-3">
-          {Object.entries(budgets).map(([cat, limit]) => {
-            const spent = spendingByCat[cat] || 0;
-            const percent = Math.min(100, (spent / (limit || 1)) * 100);
-            const remaining = limit - spent;
-            const isOver = spent > limit;
-            const isNear = percent > 75;
-
-            // Define cor da barra baseado no status
-            let barColor = 'bg-emerald-500';
-            let textColor = 'text-emerald-500';
-            if (isOver) { barColor = 'bg-red-500'; textColor = 'text-red-500'; }
-            else if (isNear) { barColor = 'bg-orange-500'; textColor = 'text-orange-500'; }
+            // Backup
+            const handleExport = () => {
+                const a = document.createElement('a');
+                a.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
+                a.download = "backup_financas.json";
+                a.click();
+            };
+            const handleImport = (e) => {
+                const fr = new FileReader();
+                fr.onload = ev => { try { setData(JSON.parse(ev.target.result)); alert("Sucesso!"); } catch { alert("Erro."); } };
+                fr.readAsText(e.target.files[0]);
+            };
 
             return (
-              <div key={cat} className={`p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                <div className={`flex flex-col h-screen font-sans transition-colors duration-300 ${darkMode ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'}`}>
                 
-                {/* Linha Superior: Ícone, Nome e Input de Limite */}
-                <div className="flex justify-between items-center mb-3">
-                   <div className="flex items-center gap-2">
-                     <div className={`p-1.5 rounded-lg ${darkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>
-                       {CATEGORIES[cat]?.icon || <Circle size={16} />}
-                     </div>
-                     <span className="font-bold text-sm">{cat}</span>
-                   </div>
-                   <div className="flex items-center gap-2">
-                     <div className="flex items-center gap-1">
-                       <span className="text-[10px] font-bold opacity-50">Teto:</span>
-                       <input 
-                         type="number" 
-                         value={limit} 
-                         onChange={(e) => onUpdateBudget(cat, e.target.value)} 
-                         className={`bg-transparent font-bold text-right w-16 outline-none border-b border-dashed ${darkMode ? 'border-zinc-700 focus:border-blue-500' : 'border-zinc-300 focus:border-blue-500'}`} 
-                       />
-                     </div>
-                     {/* Botão de Excluir Orçamento */}
-                     <button onClick={() => onDeleteBudget(cat)} className="text-zinc-500 hover:text-red-500 transition-colors p-1">
-                       <Trash2 size={14} />
-                     </button>
-                   </div>
-                </div>
-
-                {/* Barra de Progresso Real */}
-                <div className={`h-2.5 w-full rounded-full overflow-hidden ${darkMode ? 'bg-zinc-800' : 'bg-zinc-100'}`}>
-                   <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${Math.min(percent, 100)}%` }}></div>
-                </div>
-
-                {/* Linha Inferior: Status e Restante */}
-                <div className="flex justify-between items-center mt-2 text-[10px]">
-                   <span className="opacity-60">Gasto: <span className={darkMode ? 'text-zinc-300' : 'text-zinc-800'}>{formatCurrency(spent)}</span></span>
-                   
-                   {isOver ? (
-                     <span className="font-bold text-red-500 flex items-center gap-1">
-                       <AlertTriangle size={10} /> Excedido em {formatCurrency(Math.abs(remaining))}
-                     </span>
-                   ) : (
-                     <span className={`font-bold ${textColor}`}>
-                       Resta {formatCurrency(remaining)}
-                     </span>
-                   )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AccountsView({ accounts, darkMode, onAddAccount, onUpdateAccount, onDeleteAccount, onExport, fileInputRef, onImport }) {
-  return (
-    <div className="space-y-6 animate-in slide-in-from-right-8 duration-500">
-      <div>
-         <h3 className="font-bold text-sm mb-3 flex items-center gap-2"><Landmark size={16} /> Contas Correntes</h3>
-         <div className={`rounded-3xl border overflow-hidden ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
-            {accounts.map((acc, idx) => (
-              <div key={acc.id} className={`p-4 flex items-center justify-between ${idx !== accounts.length - 1 ? 'border-b border-zinc-800' : ''}`}>
-                 <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold ${acc.color}`}>
-                       <input value={acc.name.substring(0,2).toUpperCase()} readOnly className="bg-transparent w-full text-center outline-none cursor-default" />
+                {/* HEADER */}
+                <header className={`px-4 py-3 flex justify-between items-center border-b ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                    <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                        <SafeIcon icon={TrendingUp} size={18} />
                     </div>
                     <div>
-                      <input value={acc.name} onChange={(e) => onUpdateAccount(acc.id, 'name', e.target.value)} className="bg-transparent font-semibold text-sm outline-none w-32" />
-                      <p className="text-[10px] opacity-50">{acc.type}</p>
+                        <h1 className="font-bold text-lg leading-none">Finanças<span className="text-blue-500">Pro</span></h1>
+                        <span className="text-[10px] opacity-60 font-medium tracking-wider">ULTIMATE V7</span>
                     </div>
-                 </div>
-                 <div className="text-right flex flex-col items-end">
-                    <input type="number" value={acc.balance} onChange={(e) => onUpdateAccount(acc.id, 'balance', e.target.value)} className="bg-transparent font-bold text-right w-24 outline-none" />
-                    <button onClick={() => onDeleteAccount(acc.id)} className="text-[10px] text-red-500 mt-1">Excluir</button>
-                 </div>
-              </div>
-            ))}
-            <button onClick={onAddAccount} className={`w-full py-3 text-xs font-bold uppercase tracking-wider ${darkMode ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>
-              + Adicionar Nova Conta
-            </button>
-         </div>
-      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                    <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full transition-colors ${darkMode ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
+                        {darkMode ? <SafeIcon icon={Sun} size={18} /> : <SafeIcon icon={Moon} size={18} />}
+                    </button>
+                    </div>
+                </header>
 
-      <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} mt-8`}>
-        <h3 className="font-bold mb-4 flex items-center gap-2"><Save size={18} /> Backup e Dados</h3>
-        <div className="space-y-3">
-          <button onClick={onExport} className="w-full btn-primary bg-blue-600 text-white p-3 rounded-xl flex justify-center gap-2 font-medium hover:bg-blue-700 transition-colors"><Download size={18} /> Exportar Backup</button>
-          <div className="relative">
-            <input type="file" ref={fileInputRef} onChange={onImport} className="hidden" accept=".json" />
-            <button onClick={() => fileInputRef.current.click()} className={`w-full border p-3 rounded-xl flex justify-center gap-2 transition-colors ${darkMode ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-50'}`}><Upload size={18} /> Importar Backup</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+                {/* NAVEGAÇÃO DE MESES */}
+                <div className={`flex items-center gap-1 overflow-x-auto no-scrollbar py-2 px-2 border-b ${darkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                    {data.months.map((m, idx) => (
+                    <button key={m.id} onClick={() => setSelectedMonthIndex(idx)}
+                        className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${selectedMonthIndex === idx ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:bg-zinc-800'}`}>
+                        {m.label} <span className="opacity-60 font-normal ml-1">{m.year}</span>
+                    </button>
+                    ))}
+                </div>
 
-function NavItem({ icon, label, isActive, onClick }) {
-  return (
-    <button onClick={onClick} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-all duration-300 ${isActive ? 'text-blue-500' : 'text-zinc-400 opacity-60 hover:opacity-100'}`}>
-      <div className={`transition-transform duration-300 ${isActive ? '-translate-y-1' : ''}`}>{icon}</div>
-      {isActive && <span className="text-[10px] font-bold animate-in fade-in slide-in-from-bottom-2">{label}</span>}
-    </button>
-  );
-}
+                {/* CONTEÚDO PRINCIPAL */}
+                <main className="flex-1 overflow-y-auto custom-scrollbar pb-24 p-4 space-y-6">
+                    
+                    {currentTab === 'dashboard' && (
+                    <DashboardView financials={financials} darkMode={darkMode} data={data} selectedMonthIndex={selectedMonthIndex} categories={CATEGORIES} SafeIcon={SafeIcon} />
+                    )}
+
+                    {currentTab === 'transactions' && (
+                    <TransactionsView 
+                        transactions={currentMonth.transactions}
+                        darkMode={darkMode}
+                        onAdd={addTransaction}
+                        onUpdate={updateTransaction}
+                        onDelete={deleteTransaction}
+                        SafeIcon={SafeIcon}
+                    />
+                    )}
+
+                    {currentTab === 'planning' && (
+                    <PlanningView 
+                        budgets={data.budgets} goals={data.goals} 
+                        transactions={currentMonth.transactions} 
+                        darkMode={darkMode}
+                        onAddGoal={addGoal} onUpdateGoal={updateGoal} onDeleteGoal={deleteGoal} 
+                        onUpdateBudget={updateBudget} onAddBudget={addBudget} onDeleteBudget={deleteBudget}
+                        SafeIcon={SafeIcon}
+                    />
+                    )}
+
+                    {currentTab === 'accounts' && (
+                    <AccountsView 
+                        accounts={data.accounts} cards={data.creditCards} darkMode={darkMode}
+                        onAddAccount={addAccount} onUpdateAccount={updateAccount} onDeleteAccount={deleteAccount}
+                        onExport={handleExport} fileInputRef={fileInputRef} onImport={handleImport}
+                        SafeIcon={SafeIcon}
+                    />
+                    )}
+                </main>
+
+                {/* BOTTOM NAV */}
+                <nav className={`fixed bottom-0 left-0 w-full border-t z-50 pb-safe ${darkMode ? 'bg-zinc-900/95 border-zinc-800 backdrop-blur-md' : 'bg-white/95 border-slate-200'}`}>
+                    <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
+                    <NavItem icon={LayoutDashboard} label="Visão Geral" isActive={currentTab === 'dashboard'} onClick={() => setCurrentTab('dashboard')} SafeIcon={SafeIcon} />
+                    <NavItem icon={List} label="Extrato" isActive={currentTab === 'transactions'} onClick={() => setCurrentTab('transactions')} SafeIcon={SafeIcon} />
+                    <NavItem icon={Target} label="Planejamento" isActive={currentTab === 'planning'} onClick={() => setCurrentTab('planning')} SafeIcon={SafeIcon} />
+                    <NavItem icon={Wallet} label="Carteira" isActive={currentTab === 'accounts'} onClick={() => setCurrentTab('accounts')} SafeIcon={SafeIcon} />
+                    </div>
+                </nav>
+                </div>
+            );
+        }
+
+        // --- SUB-VIEWS ---
+
+        function TransactionsView({ transactions, darkMode, onAdd, onUpdate, onDelete, SafeIcon }) {
+            const [activeSubTab, setActiveSubTab] = useState('all'); 
+
+            const filteredTransactions = transactions.filter(t => {
+                if (activeSubTab === 'fixed') return t.isFixed && t.type === 'expense';
+                if (activeSubTab === 'variable') return !t.isFixed && t.type === 'expense';
+                return true; 
+            }).sort((a,b) => new Date(b.date) - new Date(a.date));
+
+            const totalFiltered = filteredTransactions.reduce((acc, t) => acc + (parseFloat(t.value) || 0), 0);
+
+            return (
+                <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+                
+                <div className={`p-1 rounded-xl flex ${darkMode ? 'bg-zinc-900' : 'bg-slate-100'}`}>
+                    <button onClick={() => setActiveSubTab('all')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'all' ? (darkMode ? 'bg-zinc-800 text-white shadow' : 'bg-white text-slate-800 shadow') : 'text-zinc-500'}`}>Cronologia</button>
+                    <button onClick={() => setActiveSubTab('fixed')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'fixed' ? (darkMode ? 'bg-zinc-800 text-white shadow' : 'bg-white text-slate-800 shadow') : 'text-zinc-500'}`}>Fixas</button>
+                    <button onClick={() => setActiveSubTab('variable')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'variable' ? (darkMode ? 'bg-zinc-800 text-white shadow' : 'bg-white text-slate-800 shadow') : 'text-zinc-500'}`}>Variáveis</button>
+                </div>
+
+                {activeSubTab !== 'all' && (
+                    <div className={`p-4 rounded-2xl flex justify-between items-center ${darkMode ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-slate-200'}`}>
+                    <div className="flex items-center gap-2">
+                        <div className={`p-2 rounded-lg ${activeSubTab === 'fixed' ? 'bg-blue-500/10 text-blue-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                        <SafeIcon icon={activeSubTab === 'fixed' ? Repeat : ShoppingCart} size={18} />
+                        </div>
+                        <div>
+                        <h3 className="font-bold text-sm">{activeSubTab === 'fixed' ? 'Despesas Fixas' : 'Despesas Variáveis'}</h3>
+                        <p className="text-[10px] opacity-60">{filteredTransactions.length} itens</p>
+                        </div>
+                    </div>
+                    <p className="text-xl font-bold">{formatCurrency(totalFiltered)}</p>
+                    </div>
+                )}
+
+                <div className={`rounded-2xl overflow-hidden border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                    {filteredTransactions.length === 0 && (
+                    <div className="p-8 text-center opacity-50 text-sm">Nenhum lançamento encontrado.</div>
+                    )}
+                    {filteredTransactions.map((t, idx) => (
+                    <div key={t.id} className={`p-4 flex items-center justify-between gap-3 group ${idx !== filteredTransactions.length - 1 ? (darkMode ? 'border-b border-zinc-800' : 'border-b border-slate-100') : ''}`}>
+                        
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${CATEGORIES[t.category]?.bg || (darkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-slate-100 text-slate-500')}`}>
+                            <SafeIcon icon={CATEGORIES[t.category]?.icon || Circle} size={16} />
+                        </div>
+                        
+                        <div className="flex flex-col flex-1 min-w-0">
+                            <input 
+                            value={t.description} 
+                            onChange={(e) => onUpdate(t.id, 'description', e.target.value)}
+                            className={`bg-transparent outline-none font-semibold text-sm w-full truncate ${darkMode ? 'text-zinc-200 placeholder-zinc-600' : 'text-slate-800 placeholder-slate-400'}`}
+                            placeholder="Descrição"
+                            />
+                            <div className="flex items-center gap-2 mt-0.5">
+                            <div className="flex items-center gap-1 text-[10px] opacity-60">
+                                <SafeIcon icon={CalendarDays} size={10} />
+                                <input type="date" value={t.date} onChange={(e) => onUpdate(t.id, 'date', e.target.value)} className="bg-transparent outline-none" />
+                            </div>
+                            <span className="text-[10px] opacity-40">•</span>
+                            <select 
+                                value={t.category} 
+                                onChange={(e) => onUpdate(t.id, 'category', e.target.value)}
+                                className={`bg-transparent text-[10px] outline-none font-medium ${darkMode ? 'text-zinc-400' : 'text-slate-500'}`}
+                            >
+                                {Object.keys(CATEGORIES).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            </select>
+                            </div>
+                        </div>
+                        </div>
+
+                        <div className="text-right flex flex-col items-end gap-1">
+                        <input 
+                            type="number" 
+                            value={t.value} 
+                            onChange={(e) => onUpdate(t.id, 'value', e.target.value)}
+                            className={`bg-transparent outline-none font-bold text-sm text-right w-24 ${t.type === 'income' ? 'text-emerald-500' : (darkMode ? 'text-zinc-200' : 'text-slate-800')}`}
+                        />
+                        
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => onDelete(t.id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                            <SafeIcon icon={Trash2} size={12} />
+                            </button>
+                            
+                            <button onClick={() => onUpdate(t.id, 'status', t.status === 'paid' ? 'pending' : 'paid')} 
+                            className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${t.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' : (darkMode ? 'bg-zinc-800 text-zinc-500' : 'bg-slate-100 text-slate-400')}`}>
+                            {t.status === 'paid' ? 'Pago' : 'Pendente'}
+                            </button>
+                        </div>
+                        </div>
+
+                    </div>
+                    ))}
+                </div>
+
+                <div className="fixed bottom-20 right-4 flex flex-col gap-3 z-40">
+                    {activeSubTab === 'all' ? (
+                    <>
+                        <button onClick={() => onAdd('income')} className="shadow-lg shadow-emerald-500/30 w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-105 transition-transform"><SafeIcon icon={TrendingUp} size={20} /></button>
+                        <button onClick={() => onAdd('expense')} className="shadow-lg shadow-red-500/30 w-14 h-14 rounded-full bg-red-500 text-white flex items-center justify-center hover:scale-105 transition-transform"><SafeIcon icon={Plus} size={24} /></button>
+                    </>
+                    ) : (
+                    <button onClick={() => onAdd('expense', activeSubTab === 'fixed')} className={`shadow-lg w-14 h-14 rounded-full text-white flex items-center justify-center hover:scale-105 transition-transform ${activeSubTab === 'fixed' ? 'bg-blue-600 shadow-blue-500/30' : 'bg-orange-500 shadow-orange-500/30'}`}>
+                        <SafeIcon icon={Plus} size={24} />
+                    </button>
+                    )}
+                </div>
+                </div>
+            );
+        }
+
+        function DashboardView({ financials, darkMode, data, selectedMonthIndex, categories, SafeIcon }) {
+            const expenses = data.months[selectedMonthIndex].transactions.filter(t => t.type === 'expense');
+            const catTotals = {};
+            expenses.forEach(t => { const cat = t.category || 'Outros'; catTotals[cat] = (catTotals[cat] || 0) + (parseFloat(t.value) || 0); });
+            const sortedCats = Object.entries(catTotals).sort((a,b) => b[1] - a[1]).slice(0, 4);
+            const maxCatVal = sortedCats[0]?.[1] || 1;
+
+            return (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="relative rounded-3xl overflow-hidden bg-blue-600 text-white shadow-xl shadow-blue-900/20 p-6">
+                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+                    <div className="relative z-10">
+                    <p className="text-blue-200 text-xs font-medium uppercase tracking-wider mb-1">Saldo Consolidado</p>
+                    <h2 className="text-3xl font-bold tracking-tight mb-4">{formatCurrency(financials.balance)}</h2>
+                    <div className="flex justify-between text-blue-100 text-xs mt-2 pt-4 border-t border-white/20">
+                        <span>Projeção Final de Mês</span>
+                        <span className="font-bold text-white">{formatCurrency(financials.projected)}</span>
+                    </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <div className={`p-5 rounded-3xl text-white bg-emerald-500 shadow-lg shadow-emerald-500/20 relative overflow-hidden`}>
+                    <div className="relative z-10"><div className="flex items-center gap-2 mb-2 opacity-90"><div className="p-1.5 bg-white/20 rounded-lg"><SafeIcon icon={TrendingUp} size={16} /></div><span className="text-xs font-bold uppercase tracking-wider">Receitas</span></div><h3 className="text-xl font-bold">{formatCurrency(financials.income)}</h3></div>
+                    </div>
+                    <div className={`p-5 rounded-3xl text-white bg-red-500 shadow-lg shadow-red-500/20 relative overflow-hidden`}>
+                    <div className="relative z-10"><div className="flex items-center gap-2 mb-2 opacity-90"><div className="p-1.5 bg-white/20 rounded-lg"><SafeIcon icon={TrendingDown} size={16} /></div><span className="text-xs font-bold uppercase tracking-wider">Despesas</span></div><h3 className="text-xl font-bold">{formatCurrency(financials.expense)}</h3></div>
+                    </div>
+                </div>
+
+                <div className={`p-5 rounded-3xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                    <h3 className="font-bold text-sm mb-4">Top Despesas</h3>
+                    <div className="space-y-4">
+                    {sortedCats.length > 0 ? sortedCats.map(([cat, val]) => (
+                        <div key={cat}>
+                        <div className="flex justify-between text-xs mb-1">
+                            <span className={darkMode ? 'text-zinc-300' : 'text-slate-700'}>{cat}</span>
+                            <span className="font-bold opacity-70">{formatCurrency(val)}</span>
+                        </div>
+                        <div className={`h-2 w-full rounded-full overflow-hidden ${darkMode ? 'bg-zinc-800' : 'bg-slate-100'}`}>
+                            <div className="h-full rounded-full" style={{ width: `${(val / maxCatVal) * 100}%`, backgroundColor: categories[cat]?.color || '#888' }}></div>
+                        </div>
+                        </div>
+                    )) : <p className="text-xs text-center opacity-50">Sem despesas registradas.</p>}
+                    </div>
+                </div>
+                </div>
+            );
+        }
+
+        function PlanningView({ budgets, goals, transactions, darkMode, onAddGoal, onUpdateGoal, onDeleteGoal, onUpdateBudget, onAddBudget, onDeleteBudget, SafeIcon }) {
+            // Cálculo de Gastos por Categoria
+            const spendingByCat = useMemo(() => {
+                const totals = {};
+                transactions.filter(t => t.type === 'expense').forEach(t => {
+                const cat = t.category || 'Outros';
+                totals[cat] = (totals[cat] || 0) + (parseFloat(t.value) || 0);
+                });
+                return totals;
+            }, [transactions]);
+
+            return (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                <div>
+                    <div className="flex justify-between items-center mb-3">
+                    <h3 className="font-bold text-sm flex items-center gap-2"><SafeIcon icon={Target} size={16} /> Meus Objetivos</h3>
+                    <button onClick={onAddGoal} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded">+ Novo</button>
+                    </div>
+                    <div className="space-y-3">
+                    {goals.map(goal => {
+                        const percent = Math.min(100, (goal.current / goal.target) * 100).toFixed(0);
+                        return (
+                        <div key={goal.id} className={`p-5 rounded-3xl border relative ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                            <div className="flex justify-between mb-4">
+                            <input value={goal.name} onChange={(e) => onUpdateGoal(goal.id, 'name', e.target.value)} className="bg-transparent font-bold text-lg outline-none w-full" />
+                            <button onClick={() => onDeleteGoal(goal.id)} className="text-red-500"><SafeIcon icon={Trash2} size={14} /></button>
+                            </div>
+                            <div className="flex justify-between items-end">
+                            <div>
+                                <p className="text-[10px] opacity-60">Atual</p>
+                                <div className="flex items-center gap-1">
+                                <span className="text-xs">R$</span>
+                                <input type="number" value={goal.current} onChange={(e) => onUpdateGoal(goal.id, 'current', e.target.value)} className="bg-transparent font-bold text-xl text-blue-500 outline-none w-24" />
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] opacity-60">Meta</p>
+                                <input type="number" value={goal.target} onChange={(e) => onUpdateGoal(goal.id, 'target', e.target.value)} className="bg-transparent font-bold text-sm text-right outline-none w-20" />
+                            </div>
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-zinc-800 mt-3 overflow-hidden">
+                            <div className="h-full bg-blue-500 transition-all" style={{ width: `${percent}%` }}></div>
+                            </div>
+                        </div>
+                        )
+                    })}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="flex justify-between items-center mb-3">
+                    <h3 className="font-bold text-sm flex items-center gap-2"><SafeIcon icon={PieChart} size={16} /> Tetos de Gastos</h3>
+                    <button onClick={onAddBudget} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded">+ Novo</button>
+                    </div>
+                    <div className="space-y-3">
+                    {Object.entries(budgets).map(([cat, limit]) => {
+                        const spent = spendingByCat[cat] || 0;
+                        const percent = Math.min(100, (spent / (limit || 1)) * 100);
+                        const remaining = limit - spent;
+                        const isOver = spent > limit;
+                        const isNear = percent > 75;
+
+                        let barColor = 'bg-emerald-500';
+                        let textColor = 'text-emerald-500';
+                        if (isOver) { barColor = 'bg-red-500'; textColor = 'text-red-500'; }
+                        else if (isNear) { barColor = 'bg-orange-500'; textColor = 'text-orange-500'; }
+
+                        return (
+                        <div key={cat} className={`p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                            
+                            <div className="flex justify-between items-center mb-3">
+                            <div className="flex items-center gap-2">
+                                <div className={`p-1.5 rounded-lg ${darkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>
+                                <SafeIcon icon={CATEGORIES[cat]?.icon || Circle} size={16} />
+                                </div>
+                                <span className="font-bold text-sm">{cat}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-bold opacity-50">Teto:</span>
+                                <input 
+                                    type="number" 
+                                    value={limit} 
+                                    onChange={(e) => onUpdateBudget(cat, e.target.value)} 
+                                    className={`bg-transparent font-bold text-right w-16 outline-none border-b border-dashed ${darkMode ? 'border-zinc-700 focus:border-blue-500' : 'border-zinc-300 focus:border-blue-500'}`} 
+                                />
+                                </div>
+                                <button onClick={() => onDeleteBudget(cat)} className="text-zinc-500 hover:text-red-500 transition-colors p-1">
+                                <SafeIcon icon={Trash2} size={14} />
+                                </button>
+                            </div>
+                            </div>
+
+                            <div className={`h-2.5 w-full rounded-full overflow-hidden ${darkMode ? 'bg-zinc-800' : 'bg-zinc-100'}`}>
+                            <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${Math.min(percent, 100)}%` }}></div>
+                            </div>
+
+                            <div className="flex justify-between items-center mt-2 text-[10px]">
+                            <span className="opacity-60">Gasto: <span className={darkMode ? 'text-zinc-300' : 'text-zinc-800'}>{formatCurrency(spent)}</span></span>
+                            
+                            {isOver ? (
+                                <span className="font-bold text-red-500 flex items-center gap-1">
+                                <SafeIcon icon={AlertTriangle} size={10} /> Excedido em {formatCurrency(Math.abs(remaining))}
+                                </span>
+                            ) : (
+                                <span className={`font-bold ${textColor}`}>
+                                Resta {formatCurrency(remaining)}
+                                </span>
+                            )}
+                            </div>
+                        </div>
+                        );
+                    })}
+                    </div>
+                </div>
+                </div>
+            );
+        }
+
+        function AccountsView({ accounts, darkMode, onAddAccount, onUpdateAccount, onDeleteAccount, onExport, fileInputRef, onImport, SafeIcon }) {
+            return (
+                <div className="space-y-6 animate-in slide-in-from-right-8 duration-500">
+                <div>
+                    <h3 className="font-bold text-sm mb-3 flex items-center gap-2"><SafeIcon icon={Landmark} size={16} /> Contas Correntes</h3>
+                    <div className={`rounded-3xl border overflow-hidden ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
+                        {accounts.map((acc, idx) => (
+                        <div key={acc.id} className={`p-4 flex items-center justify-between ${idx !== accounts.length - 1 ? 'border-b border-zinc-800' : ''}`}>
+                            <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold ${acc.color}`}>
+                                <input value={acc.name.substring(0,2).toUpperCase()} readOnly className="bg-transparent w-full text-center outline-none cursor-default" />
+                                </div>
+                                <div>
+                                <input value={acc.name} onChange={(e) => onUpdateAccount(acc.id, 'name', e.target.value)} className="bg-transparent font-semibold text-sm outline-none w-32" />
+                                <p className="text-[10px] opacity-50">{acc.type}</p>
+                                </div>
+                            </div>
+                            <div className="text-right flex flex-col items-end">
+                                <input type="number" value={acc.balance} onChange={(e) => onUpdateAccount(acc.id, 'balance', e.target.value)} className="bg-transparent font-bold text-right w-24 outline-none" />
+                                <button onClick={() => onDeleteAccount(acc.id)} className="text-[10px] text-red-500 mt-1">Excluir</button>
+                            </div>
+                        </div>
+                        ))}
+                        <button onClick={onAddAccount} className={`w-full py-3 text-xs font-bold uppercase tracking-wider ${darkMode ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>
+                        + Adicionar Nova Conta
+                        </button>
+                    </div>
+                </div>
+
+                <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'} mt-8`}>
+                    <h3 className="font-bold mb-4 flex items-center gap-2"><SafeIcon icon={Save} size={18} /> Backup e Dados</h3>
+                    <div className="space-y-3">
+                    <button onClick={onExport} className="w-full btn-primary bg-blue-600 text-white p-3 rounded-xl flex justify-center gap-2 font-medium hover:bg-blue-700 transition-colors"><SafeIcon icon={Download} size={18} /> Exportar Backup</button>
+                    <div className="relative">
+                        <input type="file" ref={fileInputRef} onChange={onImport} className="hidden" accept=".json" />
+                        <button onClick={() => fileInputRef.current.click()} className={`w-full border p-3 rounded-xl flex justify-center gap-2 transition-colors ${darkMode ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-50'}`}><SafeIcon icon={Upload} size={18} /> Importar Backup</button>
+                    </div>
+                    </div>
+                </div>
+                </div>
+            );
+        }
+
+        function NavItem({ icon, label, isActive, onClick, SafeIcon }) {
+            return (
+                <button onClick={onClick} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-all duration-300 ${isActive ? 'text-blue-500' : 'text-zinc-400 opacity-60 hover:opacity-100'}`}>
+                <div className={`transition-transform duration-300 ${isActive ? '-translate-y-1' : ''}`}><SafeIcon icon={icon} size={20} /></div>
+                {isActive && <span className="text-[10px] font-bold animate-in fade-in slide-in-from-bottom-2">{label}</span>}
+                </button>
+            );
+        }
+
+        // Renderização Inicial
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
